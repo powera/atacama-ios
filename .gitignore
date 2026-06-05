@@ -1,0 +1,25 @@
+# .gitignore
+
+# never include local claude info
+**/.claude/settings.local.json
+
+*.swp
+
+# Mac files
+.DS_STORE
+.DS_Store
+
+# keys
+keys/
+
+# Swift / Xcode build output
+.build/
+.swiftpm/
+build/
+dist/
+
+# Xcode user-specific files
+*.xcuserstate
+*.xcuserdatad
+xcuserdata/
+*.xcworkspace/xcuserdata/
