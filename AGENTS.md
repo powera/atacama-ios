@@ -15,13 +15,12 @@ primary input method.
 
 Two authoring patterns drive the design:
 
-1. **Stream of consciousness.** Beyond immediate typo correction and striking an
-   entire section, edits are tracked as *hiding* text rather than deleting it.
-   Hidden text is preserved in the submitted content and renders as a collapsed
-   footnote.
-2. **Colortext blocks entered after the fact**, which behave like footnotes. These
-   map directly onto Atacama Markup Language (AML) colortext tags, which already
-   render as collapsible footnotes on the server.
+1. **Stream of consciousness.** The author dictates freely; the transcript
+   accumulates into an editable draft. v1 uses plain text editing (correct/delete
+   normally) — there is no "hide instead of delete" edit-tracking model for now.
+2. **Colortext blocks entered after the fact**, which behave like footnotes. The
+   author selects prior text and wraps it in an Atacama Markup Language (AML)
+   colortext tag, which renders as a collapsible footnote on the server.
 
 v1 scope is **authoring/capture only** — composing and submitting posts. Reading
 and browsing existing posts is out of scope for v1.
@@ -38,14 +37,16 @@ and browsing existing posts is out of scope for v1.
   build for macOS without downloading extra SDKs:
   `xcodebuild -project Atacama.xcodeproj -scheme Atacama -sdk macosx26.1 build`.
 
-See [docs/](docs/) for architecture notes, the auth flow, and the AML colortext
-cheat-sheet.
+See [docs/](docs/) for architecture notes and the auth flow, and
+[docs/backend-api.md](docs/backend-api.md) for the full backend API spec.
 
-## Backend contract (in the `atacama` repo)
+## Backend contract (lives in the `atacama` repo)
 
-The app talks to a small JSON API on the atacama Flask server. Auth is already built
-server-side:
+The app talks to a small JSON API on the atacama Flask server. The full spec —
+including the endpoints that still need to be implemented in the `atacama` repo — is
+in [docs/backend-api.md](docs/backend-api.md). Summary:
 
+Auth is **already built** server-side:
 - **Login**: open `https://earlyversion.com/login?mobile=1&redirect=atacama://auth-callback`
   in a web auth session. The server completes Google OAuth, mints a `UserToken`, and
   redirects to `atacama://auth-callback?token=<token>`. Store the token in Keychain.
@@ -53,21 +54,20 @@ server-side:
 - **Logout / revoke**: `POST /api/logout` with the Bearer token.
 
 Endpoints used:
-- `POST /api/preview` — `{content}` → `{processed_content}` (server-rendered HTML).
-- `POST /api/messages` — `{subject, content, channel?, parent_id?}` → `201 {id, url, processed_content}`.
-- `GET /api/channels` — channel list for the picker.
+- `POST /api/preview` — `{content}` → `{processed_content}` (already exists).
+- `POST /api/messages` — create a post (**to be implemented** in atacama).
+- `GET /api/channels` — channel list for the picker (**to be implemented**).
 
 ## Project Structure
 
 ```
 atacama-ios/
 ├── AGENTS.md / CLAUDE.md (symlink)
-├── docs/                          # architecture, auth flow, AML colortext cheat-sheet
+├── docs/                          # backend-api.md, architecture, auth flow
 └── Atacama/                       # Atacama.xcodeproj (not yet created)
     ├── AtacamaApp.swift           # @main; registers atacama:// URL scheme (.onOpenURL)
     ├── Models/
-    │   ├── Draft.swift            # committed text + [EditOp] log + colortext footnotes
-    │   ├── EditOp.swift           # .correct / .strikeSection / .hide
+    │   ├── Draft.swift            # draft text + applied colortext footnotes
     │   ├── ColorTag.swift         # mirror of AML COLORS (name, sigil, cssClass, description)
     │   ├── Channel.swift          # Decodable {name, displayName, group, requiresAuth}
     │   └── MessageDraftPayload.swift  # Encodable {subject, content, channel, parent_id}
@@ -80,17 +80,12 @@ atacama-ios/
     └── Storage/                   # KeychainStore, DraftPersistence
 ```
 
-## Draft → AML mapping
+## Draft → AML
 
-`Draft.toAML()` flattens the local edit model into AML for submission:
+The draft is plain editable text. When the author adds a **colortext footnote**, the
+selected span is wrapped in the chosen AML color tag (e.g. `(green: …)` /
+`<green> … >>>`, exact syntax confirmed against the atacama parser). `Draft.toAML()`
+produces the final `content` string sent to `POST /api/messages`.
 
-- **Typo correction**: mutate the uncommitted segment in place — never reaches AML.
-- **Strike a section**: true delete — recorded as `EditOp.strikeSection` locally for
-  undo, but omitted from submitted AML.
-- **Hide**: wrap the span in the AML `hidden` colortext tag — preserved in content,
-  renders collapsed/struck.
-- **Colortext footnote**: wrap selected prior text in a chosen AML color tag.
-
-The structured `[EditOp]` log is kept locally even though v1 only submits flattened
-AML, so a future move to server-side edit history needs no client rewrite. Always
-preview via `POST /api/preview` rather than reimplementing AML rendering.
+Always preview via `POST /api/preview` rather than reimplementing AML rendering on
+the client.
