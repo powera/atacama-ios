@@ -8,6 +8,7 @@
 //
 
 import AuthenticationServices
+import Combine
 import Foundation
 #if os(iOS)
 import UIKit
