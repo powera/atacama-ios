@@ -2,9 +2,11 @@
 //  APIClient.swift
 //  Atacama
 //
-//  JSON HTTP client for the atacama authoring API. Modeled on trakaido's APIClient,
-//  extended with a POST helper. The bearer token comes from SessionManager (backed
-//  by the Keychain). See docs/backend-api.md.
+//  JSON HTTP client for the atacama / newslettr authoring API. Modeled on trakaido's
+//  APIClient, extended with a POST helper. The app can target multiple servers, so
+//  every authenticated call takes an explicit `ServerConfig`: the request is sent to
+//  that server's `apiBase` with that server's bearer token (from the Keychain).
+//  See docs/backend-api.md.
 //
 
 import Foundation
@@ -36,12 +38,9 @@ enum APIError: LocalizedError {
     }
 }
 
-/// HTTP client for the atacama JSON API.
+/// HTTP client for the atacama / newslettr JSON API.
 final class APIClient {
     static let shared = APIClient()
-
-    /// Base server URL. Configurable for local development against `launch.py`.
-    var baseURL: String = "https://earlyversion.com"
 
     private let session: URLSession
 
@@ -54,11 +53,24 @@ final class APIClient {
 
     // MARK: - GET
 
+    /// GET against a specific server, attaching that server's bearer token.
     func get<T: Decodable>(
         _ endpoint: String,
+        on server: ServerConfig,
         queryParams: [String: String]? = nil
     ) async throws -> T {
-        guard var components = URLComponents(string: fullURL(for: endpoint)) else {
+        try await get(endpoint, base: server.apiBase, token: KeychainStore.loadToken(for: server.id), queryParams: queryParams)
+    }
+
+    /// GET against an explicit base URL with an optional token (used for the
+    /// unauthenticated config fetch when adding a server).
+    private func get<T: Decodable>(
+        _ endpoint: String,
+        base: String,
+        token: String?,
+        queryParams: [String: String]? = nil
+    ) async throws -> T {
+        guard var components = URLComponents(string: fullURL(for: endpoint, base: base)) else {
             throw APIError.invalidURL
         }
         if let queryParams {
@@ -68,7 +80,7 @@ final class APIClient {
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        await applyCommonHeaders(to: &request)
+        applyCommonHeaders(to: &request, token: token)
 
         NSLog("🌐 GET \(url.absoluteString)")
         return try await send(request)
@@ -76,18 +88,19 @@ final class APIClient {
 
     // MARK: - POST
 
-    /// POST a JSON body and decode the JSON response.
+    /// POST a JSON body to a specific server and decode the JSON response.
     func post<Body: Encodable, T: Decodable>(
         _ endpoint: String,
+        on server: ServerConfig,
         body: Body
     ) async throws -> T {
-        guard let url = URL(string: fullURL(for: endpoint)) else {
+        guard let url = URL(string: fullURL(for: endpoint, base: server.apiBase)) else {
             throw APIError.invalidURL
         }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        await applyCommonHeaders(to: &request)
+        applyCommonHeaders(to: &request, token: KeychainStore.loadToken(for: server.id))
         do {
             request.httpBody = try JSONEncoder().encode(body)
         } catch {
@@ -100,14 +113,14 @@ final class APIClient {
 
     // MARK: - Helpers
 
-    private func fullURL(for endpoint: String) -> String {
-        endpoint.hasPrefix("http") ? endpoint : baseURL + endpoint
+    private func fullURL(for endpoint: String, base: String) -> String {
+        endpoint.hasPrefix("http") ? endpoint : base + endpoint
     }
 
-    private func applyCommonHeaders(to request: inout URLRequest) async {
+    private func applyCommonHeaders(to request: inout URLRequest, token: String?) {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let token = await SessionManager.shared.token {
+        if let token {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
     }
@@ -148,31 +161,44 @@ final class APIClient {
     }
 }
 
+// MARK: - Discovery
+
+extension APIClient {
+    /// Fetch a server's self-describing config (unauthenticated). Used when adding
+    /// a server by base URL. GET <baseURL>/api/atacama-config.
+    func serverConfig(baseURL: String) async throws -> ServerConfigResponse {
+        let trimmed = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let base = trimmed.hasSuffix("/") ? String(trimmed.dropLast()) : trimmed
+        return try await get("/api/atacama-config", base: base, token: nil)
+    }
+}
+
 // MARK: - Authoring endpoints
 
 extension APIClient {
     /// Render AML to HTML without persisting. POST /api/preview.
-    func preview(content: String) async throws -> String {
+    func preview(content: String, on server: ServerConfig) async throws -> String {
         let response: PreviewResponse = try await post(
             "/api/preview",
+            on: server,
             body: PreviewRequest(content: content)
         )
         return response.processedContent
     }
 
     /// Create a post. POST /api/messages.
-    func createMessage(_ payload: MessageDraftPayload) async throws -> CreatedMessage {
-        try await post("/api/messages", body: payload)
+    func createMessage(_ payload: MessageDraftPayload, on server: ServerConfig) async throws -> CreatedMessage {
+        try await post("/api/messages", on: server, body: payload)
     }
 
-    /// List channels the user may post to. GET /api/channels.
-    func channels() async throws -> ChannelList {
-        try await get("/api/channels")
+    /// List channels the user may post to on a server. GET /api/channels.
+    func channels(on server: ServerConfig) async throws -> ChannelList {
+        try await get("/api/channels", on: server)
     }
 
-    /// Revoke the current token. POST /api/logout.
-    func logout() async throws {
+    /// Revoke the current token on a server. POST /api/logout.
+    func logout(on server: ServerConfig) async throws {
         struct LogoutResponse: Decodable { let success: Bool }
-        let _: LogoutResponse = try await post("/api/logout", body: [String: String]())
+        let _: LogoutResponse = try await post("/api/logout", on: server, body: [String: String]())
     }
 }

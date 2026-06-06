@@ -11,11 +11,13 @@ import SwiftUI
 @main
 struct AtacamaApp: App {
     @StateObject private var session = SessionManager.shared
+    @StateObject private var serverStore = ServerStore.shared
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(session)
+                .environmentObject(serverStore)
                 .onOpenURL { url in
                     session.handleCallback(url)
                 }
@@ -23,15 +25,18 @@ struct AtacamaApp: App {
     }
 }
 
-/// Switches between sign-in and the authoring UI based on auth state.
+/// Switches between sign-in and the authoring UI based on the configured servers
+/// and whether the user is signed in to at least one.
 struct RootView: View {
     @EnvironmentObject private var session: SessionManager
+    @EnvironmentObject private var serverStore: ServerStore
 
     var body: some View {
-        if session.isSignedIn {
-            CaptureView()
-        } else {
+        if session.signedInServerIDs.isEmpty {
+            // No usable server yet — either none configured, or none signed in.
             SignInView()
+        } else {
+            CaptureView()
         }
     }
 }

@@ -3,7 +3,8 @@
 //  Atacama
 //
 //  Singleton owning the current in-progress draft, with debounced autosave to disk.
-//  The capture UI binds to `draft`; submission goes through `submit()`.
+//  The capture UI binds to `draft` and selects a `target` (server + channel) to post
+//  to; submission goes through `submit()` against the target's server.
 //  See docs/draft-model.md and docs/backend-api.md.
 //
 
@@ -16,8 +17,10 @@ final class DraftStore: ObservableObject {
 
     /// The current draft. Mutations trigger debounced autosave.
     @Published var draft: Draft
-    /// Channels available for the picker, loaded from the server.
-    @Published private(set) var channels: [Channel] = []
+    /// The selected server+channel this post goes to. Starts at the saved default.
+    @Published var target: PostTarget?
+    /// Channels available per server, loaded from each signed-in server.
+    @Published private(set) var channelsByServer: [UUID: [Channel]] = [:]
     @Published var isSubmitting = false
     @Published var lastError: String?
 
@@ -25,6 +28,7 @@ final class DraftStore: ObservableObject {
 
     private init() {
         self.draft = DraftPersistence.load() ?? Draft()
+        self.target = ServerStore.shared.defaultTarget
         autosaveCancellable = $draft
             .debounce(for: .seconds(1), scheduler: RunLoop.main)
             .sink { draft in
@@ -50,38 +54,66 @@ final class DraftStore: ObservableObject {
         draft = draft.applyingFootnote(tag, to: range)
     }
 
-    /// Load the channel list for the picker. Sets the draft's channel to the server
-    /// default if it has none.
+    /// The server the current target points at, if any.
+    var targetServer: ServerConfig? {
+        guard let serverID = target?.serverID else { return nil }
+        return ServerStore.shared.server(id: serverID)
+    }
+
+    /// Load the channel list for every signed-in server. Failures on one server are
+    /// surfaced but don't block the others. Picks a sensible default target/channel
+    /// if none is selected yet.
     func loadChannels() async {
-        do {
-            let list = try await APIClient.shared.channels()
-            channels = list.channels
-            if draft.channel == nil {
-                draft.channel = list.default
+        let servers = ServerStore.shared.signedInServers
+        for server in servers {
+            do {
+                let list = try await APIClient.shared.channels(on: server)
+                channelsByServer[server.id] = list.channels
+                // Seed a default target if we don't have a valid one yet.
+                if target == nil {
+                    target = PostTarget(serverID: server.id, channel: list.default)
+                } else if target?.serverID == server.id, target?.channel == nil {
+                    target?.channel = list.default
+                }
+            } catch {
+                lastError = (error as? APIError)?.errorDescription ?? error.localizedDescription
             }
-        } catch {
-            lastError = (error as? APIError)?.errorDescription ?? error.localizedDescription
         }
     }
 
-    /// Render the current draft to server HTML for preview.
+    /// Render the current draft to server HTML for preview, against the target server.
     func preview() async -> String? {
+        guard let server = targetServer else {
+            lastError = "Choose a server to post to first."
+            return nil
+        }
         do {
-            return try await APIClient.shared.preview(content: draft.toAML())
+            return try await APIClient.shared.preview(content: draft.toAML(), on: server)
         } catch {
             lastError = (error as? APIError)?.errorDescription ?? error.localizedDescription
             return nil
         }
     }
 
-    /// Submit the draft. On success, clears the draft and its autosave file and
-    /// returns the created message; on failure, sets `lastError` and returns nil.
+    /// Submit the draft to the target server+channel. On success, clears the draft
+    /// and its autosave file and returns the created message; on failure, sets
+    /// `lastError` and returns nil.
     func submit() async -> CreatedMessage? {
         guard !draft.isEmpty else { return nil }
+        guard let server = targetServer else {
+            lastError = "Choose a server to post to first."
+            return nil
+        }
         isSubmitting = true
         defer { isSubmitting = false }
+        let payload = MessageDraftPayload(
+            subject: draft.subject,
+            content: draft.toAML(),
+            channel: target?.channel,
+            parentId: draft.parentId
+        )
         do {
-            let created = try await APIClient.shared.createMessage(draft.payload())
+            let created = try await APIClient.shared.createMessage(payload, on: server)
             DraftPersistence.clear()
             draft = Draft()
             return created

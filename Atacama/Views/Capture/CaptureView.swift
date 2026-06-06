@@ -10,6 +10,7 @@ import SwiftUI
 
 struct CaptureView: View {
     @EnvironmentObject private var session: SessionManager
+    @ObservedObject private var serverStore = ServerStore.shared
     @StateObject private var store = DraftStore.shared
     @StateObject private var stt = STTService()
     @StateObject private var tts = TTSService()
@@ -20,6 +21,7 @@ struct CaptureView: View {
     @State private var previewHTML: String?
     @State private var showMicPermissionAlert = false
     @State private var submittedURL: String?
+    @State private var showServers = false
 
     var body: some View {
         NavigationStack {
@@ -36,8 +38,12 @@ struct CaptureView: View {
                 )
                 .padding(.horizontal)
 
-                ChannelPicker(channels: store.channels, selection: $store.draft.channel)
-                    .padding(.horizontal)
+                PostTargetPicker(
+                    servers: serverStore.signedInServers,
+                    channelsByServer: store.channelsByServer,
+                    selection: $store.target
+                )
+                .padding(.horizontal)
 
                 controlBar
             }
@@ -48,8 +54,8 @@ struct CaptureView: View {
                         Button("Read draft aloud", systemImage: "speaker.wave.2") {
                             tts.speak(store.draft.body)
                         }
-                        Button("Sign out", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
-                            session.signOut()
+                        Button("Servers…", systemImage: "server.rack") {
+                            showServers = true
                         }
                     } label: {
                         Image(systemName: "ellipsis.circle")
@@ -64,7 +70,10 @@ struct CaptureView: View {
                 }
             }
             .sheet(isPresented: $showPreview) {
-                PreviewSheet(html: previewHTML)
+                PreviewSheet(html: previewHTML, baseURL: store.targetServer?.apiBase)
+            }
+            .sheet(isPresented: $showServers) {
+                ServerListView()
             }
             .alert("Microphone access needed", isPresented: $showMicPermissionAlert) {
                 Button("OK", role: .cancel) {}
@@ -78,6 +87,11 @@ struct CaptureView: View {
             }
             .task {
                 await store.loadChannels()
+            }
+            // Reload channels when the set of signed-in servers changes (e.g. after
+            // signing in/out from the Servers screen).
+            .onChange(of: session.signedInServerIDs) {
+                Task { await store.loadChannels() }
             }
         }
     }
@@ -155,13 +169,15 @@ struct CaptureView: View {
 /// Shows the server-rendered HTML preview in a web view.
 private struct PreviewSheet: View {
     let html: String?
+    /// API base of the server the preview was rendered by, for asset resolution.
+    var baseURL: String?
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             Group {
                 if let html {
-                    HTMLView(html: html)
+                    HTMLView(html: html, baseURL: baseURL)
                 } else {
                     ContentUnavailableView("No preview", systemImage: "eye.slash")
                 }

@@ -32,10 +32,12 @@ let atacamaCallbackScheme = "atacama"
 
 enum AuthenticationService {
     /// OAuth login URL. The server completes Google OAuth, mints a UserToken, and
-    /// redirects to `atacama://auth-callback?token=<token>`.
-    static func loginURL(baseURL: String) -> URL {
+    /// redirects to `atacama://auth-callback?token=<token>`. `loginPath` comes from
+    /// the server's /api/atacama-config (defaults to `/login`).
+    static func loginURL(baseURL: String, loginPath: String = "/login") -> URL {
         let redirect = "\(atacamaCallbackScheme)://auth-callback"
-        return URL(string: "\(baseURL)/login?mobile=1&redirect=\(redirect)")!
+        let path = loginPath.hasPrefix("/") ? loginPath : "/" + loginPath
+        return URL(string: "\(baseURL)\(path)?mobile=1&redirect=\(redirect)")!
     }
 
     /// Extract the bearer token from the OAuth callback URL.

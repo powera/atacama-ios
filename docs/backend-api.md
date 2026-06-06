@@ -1,15 +1,61 @@
 # Backend API spec
 
-The JSON API that **Atacama iOS** consumes. The backend lives in the separate
-**atacama** repo (Python/Flask, served at `https://earlyversion.com`). This document
-is the contract from the iOS client's point of view, and the spec for the two
-endpoints the atacama repo still needs to implement.
+The JSON API that **Atacama iOS** consumes. The app can author against **one or
+more servers**: the original **atacama** backend (Python/Flask, e.g.
+`https://earlyversion.com`) and the **newslettr** Go backend, which deliberately
+mirrors the same JSON surface (`/api/preview`, `/api/messages`↔`/api/posts`,
+`/api/channels`↔`/api/topics`, `/api/logout`). This document is the contract from
+the iOS client's point of view.
+
+## Multi-server model
+
+- A **server** is added by its base URL. The app fetches
+  [`GET /api/atacama-config`](#get-apiatacama-config) to learn the server's name,
+  API base, and auth flow.
+- Each server has its **own bearer token**, stored in the Keychain keyed by the
+  server's id. The app may be signed in to several servers at once.
+- The user posts to a **server + channel** target chosen per post on the capture
+  screen; Settings marks one default target.
+- Auth differs by backend: atacama uses **OAuth** (web sign-in → token); newslettr
+  uses **email/password** (`POST /api/login`). The config endpoint declares which
+  via `auth.type`. **The app currently drives only the OAuth flow**; servers with a
+  non-oauth `auth.type` are listed but their sign-in is disabled until a password
+  flow (or newslettr OAuth) is added.
 
 Status legend:
-- ✅ **exists** — already implemented in atacama; no backend work needed.
-- 🟡 **to implement** — must be added in the atacama repo before the iOS app can use it.
+- ✅ **exists** — already implemented in the backend(s); no backend work needed.
 
-Base URL: `https://earlyversion.com` (make this configurable in `APIClient`).
+---
+
+## `GET /api/atacama-config` ✅
+
+Self-describing config the app fetches when a server is added (unauthenticated
+discovery). Served identically by both backends.
+
+**Request**
+```http
+GET /api/atacama-config
+```
+
+**Response** `200`
+```json
+{
+  "name": "Alex Power's blog",
+  "api_base": "https://earlyversion.com",
+  "auth": { "type": "oauth", "login_path": "/login" },
+  "capabilities": { "preview": true, "messages": true, "channels": true }
+}
+```
+
+- `name` — display name for the server list (falls back to host).
+- `api_base` — absolute base the app prefixes onto `/api/...` paths.
+- `auth.type` — `"oauth"` (atacama) or `"password"` (newslettr). The app branches
+  on this; only `oauth` is wired up today.
+- `auth.login_path` — path the OAuth flow opens (atacama: `/login`).
+- `capabilities` — informational feature flags.
+
+Implemented in atacama at `src/blog/blueprints/api.py` (`client_config_api`) and in
+newslettr at `internal/app/publisher/routes.go` (`apiConfig`).
 
 ---
 
@@ -90,11 +136,14 @@ reimplements AML rendering.
 
 ---
 
-## `POST /api/messages` 🟡 (to implement in atacama)
+## `POST /api/messages` ✅
 
-Create a new post (an `Email` message) from JSON. The atacama repo currently only
-has the form-based `POST /submit`; this endpoint exposes the same creation pipeline
-over JSON.
+Create a new post from JSON. On atacama this creates an `Email` message via the
+same creation pipeline as the form-based `POST /submit`
+(`src/blog/blueprints/api.py`, `create_message_api`); on newslettr it creates a
+`Post` (`/api/messages` is an alias of `/api/posts`, see `apiCreatePost`). The
+`id` field is an integer on atacama and a string GUID on newslettr — the client
+decodes it as a string.
 
 ### Implementation notes (for the atacama side)
 
@@ -153,9 +202,11 @@ Content-Type: application/json
 
 ---
 
-## `GET /api/channels` 🟡 (to implement in atacama)
+## `GET /api/channels` ✅
 
 List the channels the authenticated user may post to, for the channel picker.
+Implemented in atacama (`list_channels_api`) and newslettr (`apiTopics`, where
+`/api/channels` is an alias of `/api/topics` and `name` carries the topic GUID).
 
 ### Implementation notes (for the atacama side)
 

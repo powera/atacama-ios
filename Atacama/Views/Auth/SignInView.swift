@@ -2,13 +2,19 @@
 //  SignInView.swift
 //  Atacama
 //
-//  Sign-in screen. Kicks off the OAuth web auth session via SessionManager.
+//  Shown when no server is signed in. Routes the user to the Servers screen to add
+//  a server and/or sign in. (Sign-in itself is per-server via the OAuth web flow.)
 //
 
 import SwiftUI
 
 struct SignInView: View {
     @EnvironmentObject private var session: SessionManager
+    @EnvironmentObject private var serverStore: ServerStore
+
+    @State private var showServers = false
+
+    private var hasServers: Bool { !serverStore.servers.isEmpty }
 
     var body: some View {
         VStack(spacing: 24) {
@@ -21,7 +27,7 @@ struct SignInView: View {
             VStack(spacing: 8) {
                 Text("Atacama")
                     .font(.largeTitle.bold())
-                Text("Voice-first authoring for earlyversion.com")
+                Text("Voice-first authoring")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -30,20 +36,14 @@ struct SignInView: View {
             Spacer()
 
             Button {
-                session.signIn()
+                showServers = true
             } label: {
-                HStack {
-                    if session.isSigningIn {
-                        ProgressView()
-                    }
-                    Text(session.isSigningIn ? "Signing in…" : "Sign in")
-                        .fontWeight(.semibold)
-                }
-                .frame(maxWidth: .infinity)
-                .padding()
+                Text(hasServers ? "Sign in" : "Add a server")
+                    .fontWeight(.semibold)
+                    .frame(maxWidth: .infinity)
+                    .padding()
             }
             .buttonStyle(.borderedProminent)
-            .disabled(session.isSigningIn)
 
             if let error = session.lastError {
                 Text(error)
@@ -53,5 +53,8 @@ struct SignInView: View {
             }
         }
         .padding(32)
+        .sheet(isPresented: $showServers) {
+            ServerListView()
+        }
     }
 }

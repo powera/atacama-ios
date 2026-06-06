@@ -12,13 +12,15 @@ import WebKit
 #if os(iOS)
 struct HTMLView: UIViewRepresentable {
     let html: String
+    /// Document base URL for resolving relative links/assets — the target server.
+    var baseURL: String?
 
     func makeUIView(context: Context) -> WKWebView {
         WKWebView()
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
-        webView.loadHTMLString(wrappedHTML, baseURL: URL(string: APIClient.shared.baseURL))
+        webView.loadHTMLString(wrappedHTML, baseURL: baseURL.flatMap(URL.init(string:)))
     }
 
     private var wrappedHTML: String { wrapForPreview(html) }
@@ -26,13 +28,15 @@ struct HTMLView: UIViewRepresentable {
 #else
 struct HTMLView: NSViewRepresentable {
     let html: String
+    /// Document base URL for resolving relative links/assets — the target server.
+    var baseURL: String?
 
     func makeNSView(context: Context) -> WKWebView {
         WKWebView()
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {
-        webView.loadHTMLString(wrappedHTML, baseURL: URL(string: APIClient.shared.baseURL))
+        webView.loadHTMLString(wrappedHTML, baseURL: baseURL.flatMap(URL.init(string:)))
     }
 
     private var wrappedHTML: String { wrapForPreview(html) }

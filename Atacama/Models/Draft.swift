@@ -57,16 +57,6 @@ struct Draft: Identifiable, Codable, Equatable {
         body
     }
 
-    /// The payload for POST /api/messages.
-    func payload() -> MessageDraftPayload {
-        MessageDraftPayload(
-            subject: subject,
-            content: toAML(),
-            channel: channel,
-            parentId: parentId
-        )
-    }
-
     /// Wrap a range of `body` in an inline AML colortext footnote: `(<color> text)`.
     ///
     /// This is the "add a footnote after the fact" operation. The server renders the
