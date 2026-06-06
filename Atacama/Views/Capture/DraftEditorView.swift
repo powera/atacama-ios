@@ -21,12 +21,22 @@ struct DraftEditorView: View {
     let liveTranscript: String
     /// Reports the current selection (as a String range into `text`), or nil.
     @Binding var selectedRange: Range<String.Index>?
+    /// Whether dictation is currently active (reflected in the keyboard accessory mic).
+    var isRecording: Bool = false
+    /// Toggle dictation from the keyboard accessory bar. Lets the author switch from
+    /// typing back to voice without hunting for the mic beneath the keyboard.
+    var onToggleDictation: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             #if os(iOS)
-            SelectableTextEditor(text: $text, selectedRange: $selectedRange)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            SelectableTextEditor(
+                text: $text,
+                selectedRange: $selectedRange,
+                isRecording: isRecording,
+                onToggleDictation: onToggleDictation
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             #else
             TextEditor(text: $text)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -47,6 +57,8 @@ struct DraftEditorView: View {
 private struct SelectableTextEditor: UIViewRepresentable {
     @Binding var text: String
     @Binding var selectedRange: Range<String.Index>?
+    var isRecording: Bool = false
+    var onToggleDictation: (() -> Void)?
 
     func makeUIView(context: Context) -> UITextView {
         let view = UITextView()
@@ -54,6 +66,12 @@ private struct SelectableTextEditor: UIViewRepresentable {
         view.font = .preferredFont(forTextStyle: .body)
         view.backgroundColor = .clear
         view.isScrollEnabled = true
+        // Drag-to-dismiss keeps voice-first ergonomics: the keyboard is only up while
+        // hand-correcting, and a swipe puts it away.
+        view.keyboardDismissMode = .interactive
+        if onToggleDictation != nil {
+            view.inputAccessoryView = context.coordinator.makeAccessoryView()
+        }
         return view
     }
 
@@ -61,15 +79,55 @@ private struct SelectableTextEditor: UIViewRepresentable {
         if uiView.text != text {
             uiView.text = text
         }
+        context.coordinator.updateAccessory(isRecording: isRecording)
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     final class Coordinator: NSObject, UITextViewDelegate {
         private let parent: SelectableTextEditor
+        private weak var micButton: UIBarButtonItem?
 
         init(_ parent: SelectableTextEditor) {
             self.parent = parent
+        }
+
+        /// Builds the bar shown above the keyboard while hand-editing: a mic toggle so
+        /// the author can hop back to voice, and a Done button to dismiss.
+        func makeAccessoryView() -> UIToolbar {
+            let bar = UIToolbar()
+            bar.sizeToFit()
+            let mic = UIBarButtonItem(
+                image: UIImage(systemName: "mic.fill"),
+                style: .plain,
+                target: self,
+                action: #selector(toggleDictation)
+            )
+            mic.accessibilityLabel = "Start dictation"
+            self.micButton = mic
+            let spacer = UIBarButtonItem(systemItem: .flexibleSpace)
+            let done = UIBarButtonItem(
+                barButtonSystemItem: .done,
+                target: self,
+                action: #selector(dismissKeyboard)
+            )
+            bar.items = [mic, spacer, done]
+            return bar
+        }
+
+        func updateAccessory(isRecording: Bool) {
+            micButton?.image = UIImage(systemName: isRecording ? "stop.fill" : "mic.fill")
+            micButton?.accessibilityLabel = isRecording ? "Stop dictation" : "Start dictation"
+        }
+
+        @objc private func toggleDictation() {
+            parent.onToggleDictation?()
+        }
+
+        @objc private func dismissKeyboard() {
+            UIApplication.shared.sendAction(
+                #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil
+            )
         }
 
         func textViewDidChange(_ textView: UITextView) {

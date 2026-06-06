@@ -7,6 +7,9 @@
 //
 
 import SwiftUI
+#if os(iOS)
+import UIKit
+#endif
 
 struct CaptureView: View {
     @EnvironmentObject private var session: SessionManager
@@ -22,33 +25,63 @@ struct CaptureView: View {
     @State private var showMicPermissionAlert = false
     @State private var submittedURL: String?
     @State private var showServers = false
+    @State private var showSubjectEditor = false
+
+    /// Compact vertical space (landscape, or portrait with the keyboard up on small
+    /// devices): hide the inline Subject field and channel picker, shrink the mic.
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+
+    private var isCompact: Bool { verticalSizeClass == .compact }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 12) {
-                TextField("Subject", text: $store.draft.subject)
-                    .font(.headline)
-                    .textFieldStyle(.roundedBorder)
-                    .padding(.horizontal)
+            VStack(spacing: isCompact ? 8 : 12) {
+                if !isCompact {
+                    TextField("Subject", text: $store.draft.subject)
+                        .font(.headline)
+                        .textFieldStyle(.roundedBorder)
+                        .padding(.horizontal)
+                }
 
                 DraftEditorView(
                     text: $store.draft.body,
                     liveTranscript: stt.transcript,
-                    selectedRange: $selectedRange
+                    selectedRange: $selectedRange,
+                    isRecording: stt.isRecording,
+                    onToggleDictation: { Task { await toggleDictation() } }
                 )
                 .padding(.horizontal)
 
-                PostTargetPicker(
-                    servers: serverStore.signedInServers,
-                    channelsByServer: store.channelsByServer,
-                    selection: $store.target
-                )
-                .padding(.horizontal)
+                if !isCompact {
+                    PostTargetPicker(
+                        servers: serverStore.signedInServers,
+                        channelsByServer: store.channelsByServer,
+                        selection: $store.target
+                    )
+                    .padding(.horizontal)
+                }
 
                 controlBar
             }
             .navigationTitle("New post")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(isCompact ? .inline : .automatic)
+            #endif
             .toolbar {
+                // In compact layouts the Subject field is hidden inline; expose it here.
+                if isCompact {
+                    ToolbarItem(placement: .principal) {
+                        Button {
+                            showSubjectEditor = true
+                        } label: {
+                            Label(
+                                store.draft.subject.isEmpty ? "Subject" : store.draft.subject,
+                                systemImage: "textformat"
+                            )
+                            .lineLimit(1)
+                        }
+                    }
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
                         Button("Read draft aloud", systemImage: "speaker.wave.2") {
@@ -75,6 +108,10 @@ struct CaptureView: View {
             .sheet(isPresented: $showServers) {
                 ServerListView()
             }
+            .sheet(isPresented: $showSubjectEditor) {
+                SubjectEditorSheet(subject: $store.draft.subject)
+                    .presentationDetents([.height(160)])
+            }
             .alert("Microphone access needed", isPresented: $showMicPermissionAlert) {
                 Button("OK", role: .cancel) {}
             } message: {
@@ -97,29 +134,49 @@ struct CaptureView: View {
     }
 
     private var controlBar: some View {
-        HStack(spacing: 24) {
-            Button {
-                showColorPicker = true
-            } label: {
-                Label("Footnote", systemImage: "character.bubble")
+        VStack(spacing: 8) {
+            // Compact layouts hide the inline channel picker; surface it here as a
+            // compact menu so the destination is still one tap away.
+            if isCompact {
+                PostTargetPicker(
+                    servers: serverStore.signedInServers,
+                    channelsByServer: store.channelsByServer,
+                    selection: $store.target,
+                    style: .compact
+                )
+                .buttonStyle(.bordered)
             }
-            .disabled(selectedRange == nil)
 
-            MicButton(isRecording: stt.isRecording) {
-                Task { await toggleDictation() }
-            }
+            HStack(spacing: isCompact ? 16 : 24) {
+                Button {
+                    showColorPicker = true
+                } label: {
+                    Label("Footnote", systemImage: "character.bubble")
+                        .labelStyle(.iconOnly)
+                }
+                .disabled(selectedRange == nil)
 
-            Button {
-                Task { await runPreview() }
-            } label: {
-                Label("Preview", systemImage: "eye")
+                Spacer()
+
+                MicButton(isRecording: stt.isRecording, size: isCompact ? 56 : 80) {
+                    Task { await toggleDictation() }
+                }
+
+                Spacer()
+
+                Button {
+                    Task { await runPreview() }
+                } label: {
+                    Label("Preview", systemImage: "eye")
+                        .labelStyle(.iconOnly)
+                }
+                .disabled(store.draft.isEmpty)
+
+                submitButton
             }
-            .disabled(store.draft.isEmpty)
         }
+        .padding(.horizontal)
         .padding(.bottom, 8)
-        .overlay(alignment: .bottomTrailing) {
-            submitButton.padding(.trailing)
-        }
     }
 
     private var submitButton: some View {
@@ -143,6 +200,9 @@ struct CaptureView: View {
             stt.stop()
             return
         }
+        // Switching from hand-editing to voice: drop the keyboard so the draft and
+        // controls have the full screen while dictating.
+        dismissKeyboard()
         let granted = await stt.requestAuthorization()
         guard granted else {
             showMicPermissionAlert = true
@@ -162,6 +222,42 @@ struct CaptureView: View {
         if stt.isRecording { stt.stop() }
         if let created = await store.submit() {
             submittedURL = created.url
+        }
+    }
+
+    private func dismissKeyboard() {
+        #if os(iOS)
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil
+        )
+        #endif
+    }
+}
+
+/// Small sheet for editing the post subject when the inline field is hidden in
+/// compact (landscape) layouts.
+private struct SubjectEditorSheet: View {
+    @Binding var subject: String
+    @Environment(\.dismiss) private var dismiss
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        NavigationStack {
+            TextField("Subject", text: $subject)
+                .font(.headline)
+                .textFieldStyle(.roundedBorder)
+                .focused($focused)
+                .padding()
+                .navigationTitle("Subject")
+                #if os(iOS)
+                .navigationBarTitleDisplayMode(.inline)
+                #endif
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { dismiss() }
+                    }
+                }
+                .onAppear { focused = true }
         }
     }
 }
