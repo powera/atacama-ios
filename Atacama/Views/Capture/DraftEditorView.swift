@@ -19,8 +19,10 @@ struct DraftEditorView: View {
     @Binding var text: String
     /// Live partial transcript from STT, shown faded below the committed text.
     let liveTranscript: String
-    /// Reports the current selection (as a String range into `text`), or nil.
-    @Binding var selectedRange: Range<String.Index>?
+    /// Reports the current selection as a character-offset range into `text`, or nil.
+    /// Offsets (not `String.Index`) are used because the range is consumed against a
+    /// different `String` instance, and indices aren't transferable between instances.
+    @Binding var selectedRange: Range<Int>?
     /// Whether dictation is currently active (reflected in the keyboard accessory mic).
     var isRecording: Bool = false
     /// Toggle dictation from the keyboard accessory bar. Lets the author switch from
@@ -70,7 +72,7 @@ struct DraftEditorView: View {
 /// A UITextView wrapper that surfaces the selected text range as a String index range.
 private struct SelectableTextEditor: UIViewRepresentable {
     @Binding var text: String
-    @Binding var selectedRange: Range<String.Index>?
+    @Binding var selectedRange: Range<Int>?
     var isRecording: Bool = false
     var onToggleDictation: (() -> Void)?
 
@@ -154,16 +156,23 @@ private struct SelectableTextEditor: UIViewRepresentable {
                 parent.selectedRange = nil
                 return
             }
-            let start = textView.offset(from: textView.beginningOfDocument, to: selected.start)
-            let length = textView.offset(from: selected.start, to: selected.end)
+            // UITextView positions are UTF-16 offsets; convert to Character offsets so the
+            // reported range lines up with Swift String indexing in the draft body.
+            let utf16Start = textView.offset(from: textView.beginningOfDocument, to: selected.start)
+            let utf16End = textView.offset(from: textView.beginningOfDocument, to: selected.end)
             let text = textView.text ?? ""
-            guard let lower = text.index(text.startIndex, offsetBy: start, limitedBy: text.endIndex),
-                  let upper = text.index(lower, offsetBy: length, limitedBy: text.endIndex)
+            let utf16 = text.utf16
+            guard let lowerUTF16 = utf16.index(utf16.startIndex, offsetBy: utf16Start, limitedBy: utf16.endIndex),
+                  let upperUTF16 = utf16.index(utf16.startIndex, offsetBy: utf16End, limitedBy: utf16.endIndex),
+                  let lower = lowerUTF16.samePosition(in: text),
+                  let upper = upperUTF16.samePosition(in: text)
             else {
                 parent.selectedRange = nil
                 return
             }
-            parent.selectedRange = lower ..< upper
+            let lowerOffset = text.distance(from: text.startIndex, to: lower)
+            let upperOffset = text.distance(from: text.startIndex, to: upper)
+            parent.selectedRange = lowerOffset ..< upperOffset
         }
     }
 }

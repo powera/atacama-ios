@@ -81,14 +81,22 @@ struct Draft: Identifiable, Codable, Equatable {
     /// Wrap a range of `body` in an inline AML colortext footnote: `(<color> text)`.
     ///
     /// This is the "add a footnote after the fact" operation. The server renders the
-    /// wrapped span as a collapsible footnote. Returns a new range-adjusted Draft;
-    /// no-op (returns self) if the range is empty or out of bounds.
-    func applyingFootnote(_ tag: ColorTag, to range: Range<String.Index>) -> Draft {
-        guard !range.isEmpty,
-              range.lowerBound >= body.startIndex,
-              range.upperBound <= body.endIndex
+    /// wrapped span as a collapsible footnote. Returns a new Draft; no-op (returns
+    /// self) if the range is empty or out of bounds.
+    ///
+    /// The range is given as character offsets into `body` rather than `String.Index`
+    /// values: the selection originates from a different `String` instance in the
+    /// editor view, and `String.Index` values are not transferable between instances.
+    /// Offsets are stable, so we resolve them against the live `body` here.
+    func applyingFootnote(_ tag: ColorTag, to offsets: Range<Int>) -> Draft {
+        guard !offsets.isEmpty, offsets.lowerBound >= 0 else { return self }
+
+        guard let lower = body.index(body.startIndex, offsetBy: offsets.lowerBound, limitedBy: body.endIndex),
+              let upper = body.index(body.startIndex, offsetBy: offsets.upperBound, limitedBy: body.endIndex),
+              lower < upper
         else { return self }
 
+        let range = lower ..< upper
         let selected = body[range]
         let wrapped = "(<\(tag.name)> \(selected))"
         var copy = self

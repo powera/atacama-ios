@@ -56,8 +56,9 @@ final class DraftStore: ObservableObject {
     }
 
     /// Wrap a selected range of the body in a colortext footnote.
-    func applyFootnote(_ tag: ColorTag, to range: Range<String.Index>) {
-        draft = draft.applyingFootnote(tag, to: range)
+    /// The range is given as character offsets into the body (see `applyingFootnote`).
+    func applyFootnote(_ tag: ColorTag, to offsets: Range<Int>) {
+        draft = draft.applyingFootnote(tag, to: offsets)
     }
 
     /// The server the current target points at, if any.

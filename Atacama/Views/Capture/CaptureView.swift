@@ -23,7 +23,12 @@ struct CaptureView: View {
     @StateObject private var stt = STTService()
     @StateObject private var tts = TTSService()
 
-    @State private var selectedRange: Range<String.Index>?
+    /// Live selection reported by the editor (character offsets into the body).
+    @State private var selectedRange: Range<Int>?
+    /// Selection captured when the Footnote button is tapped. Presenting the picker
+    /// sheet resigns the editor's first responder, which clears `selectedRange`, so we
+    /// snapshot it here and apply the footnote against the snapshot.
+    @State private var footnoteRange: Range<Int>?
     @State private var showColorPicker = false
     @State private var showPreview = false
     @State private var previewHTML: String?
@@ -96,7 +101,7 @@ struct CaptureView: View {
             }
             .sheet(isPresented: $showColorPicker) {
                 ColorTagPickerView { tag in
-                    if let range = selectedRange {
+                    if let range = footnoteRange {
                         store.applyFootnote(tag, to: range)
                     }
                 }
@@ -175,7 +180,11 @@ struct CaptureView: View {
                     "Footnote",
                     systemImage: "character.bubble",
                     disabled: selectedRange == nil
-                ) { showColorPicker = true }
+                ) {
+                    // Snapshot the selection before the sheet steals first responder.
+                    footnoteRange = selectedRange
+                    showColorPicker = true
+                }
 
                 actionButton(
                     "New section",
