@@ -65,6 +65,7 @@ struct CaptureView: View {
                     selectedRange: $selectedRange,
                     isRecording: stt.isRecording,
                     onToggleDictation: { Task { await toggleDictation() } },
+                    onAddFootnote: beginFootnoteSelection,
                     placeholder: editorPlaceholder
                 )
                 .frame(minHeight: isKeyboardVisible ? 220 : 280, maxHeight: .infinity)
@@ -104,6 +105,7 @@ struct CaptureView: View {
                     if let range = footnoteRange {
                         store.applyFootnote(tag, to: range)
                     }
+                    footnoteRange = nil
                 }
             }
             .sheet(isPresented: $showPreview) {
@@ -181,16 +183,18 @@ struct CaptureView: View {
                     systemImage: "character.bubble",
                     disabled: selectedRange == nil
                 ) {
-                    // Snapshot the selection before the sheet steals first responder.
-                    footnoteRange = selectedRange
-                    showColorPicker = true
+                    beginFootnoteSelection()
                 }
 
                 actionButton(
                     "New section",
                     systemImage: "text.badge.plus",
                     disabled: store.draft.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ) { store.insertSectionBreak() }
+                        && stt.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ) {
+                    commitLiveTranscript()
+                    store.insertSectionBreak()
+                }
 
                 actionButton(
                     "Preview",
@@ -260,6 +264,7 @@ struct CaptureView: View {
 
     private func toggleDictation() async {
         if stt.isRecording {
+            commitLiveTranscript()
             stt.stop()
             return
         }
@@ -277,6 +282,7 @@ struct CaptureView: View {
     }
 
     private func runPreview() async {
+        commitLiveTranscript()
         previewHTML = await store.preview()
         if previewHTML != nil {
             showPreview = true
@@ -286,12 +292,28 @@ struct CaptureView: View {
     }
 
     private func submit() async {
+        commitLiveTranscript()
         if stt.isRecording { stt.stop() }
         if let created = await store.submit() {
             submittedURL = created.url
         } else if store.lastError != nil {
             showError = true
         }
+    }
+
+    /// Snapshot the current editor selection before the color picker sheet or
+    /// keyboard dismissal can clear the UITextView selection.
+    private func beginFootnoteSelection() {
+        guard let selectedRange else { return }
+        footnoteRange = selectedRange
+        showColorPicker = true
+    }
+
+    /// Move the latest speech recognizer partial/final text into the editable draft.
+    /// This is called whenever the author takes an action that should use the dictated
+    /// words immediately (Stop, Preview, Post, or inserting a section).
+    private func commitLiveTranscript() {
+        store.appendUtterance(stt.consumeTranscript())
     }
 
     private func dismissKeyboard() {
