@@ -1,17 +1,16 @@
 # Atacama iOS
 
-A native iOS app for fast, voice-first authoring of posts on
+A native SwiftUI iOS app for simple, voice-first posting to
 [Atacama](https://earlyversion.com), a semantic publishing CMS.
 
-Speech-to-text is the primary input. Drafts are written stream-of-consciousness;
-edits are tracked as *hiding* text (preserved, not deleted), and colortext blocks
-are added after the fact as collapsible footnotes.
+The app is intentionally focused on authoring only:
 
-This repo is **just the SwiftUI app**. The backend lives in the separate **atacama**
-repo (served at earlyversion.com); see [AGENTS.md](AGENTS.md) for the backend API
-contract it depends on.
+- choose the target server and channel;
+- enter a post title;
+- dictate or type post sections;
+- insert four-dash (`----`) AML section breaks between sections; and
+- select existing text to wrap it in an AML colortext footnote.
 
-See [AGENTS.md](AGENTS.md) for architecture and project structure, and [docs/](docs/)
-for detailed notes.
-
-> **Status:** scaffolding only. No Swift sources or Xcode project yet.
+This repo is **just the iOS client**. The backend lives in the separate **atacama**
+repo (served at earlyversion.com); see [AGENTS.md](AGENTS.md) and
+[docs/backend-api.md](docs/backend-api.md) for the API contract it depends on.

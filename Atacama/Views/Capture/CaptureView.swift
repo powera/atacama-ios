@@ -2,8 +2,8 @@
 //  CaptureView.swift
 //  Atacama
 //
-//  The primary authoring screen: dictate a stream-of-consciousness draft, edit it,
-//  add colortext footnotes to selected text, pick a channel, preview, and submit.
+//  The primary authoring screen: choose a destination, enter a title, dictate
+//  sections, add colortext footnotes to selected text, preview, and submit.
 //
 
 import SwiftUI
@@ -25,10 +25,11 @@ struct CaptureView: View {
     @State private var showMicPermissionAlert = false
     @State private var submittedURL: String?
     @State private var showServers = false
-    @State private var showSubjectEditor = false
+    @State private var showTitleEditor = false
+    @State private var showError = false
 
     /// Compact vertical space (landscape, or portrait with the keyboard up on small
-    /// devices): hide the inline Subject field and channel picker, shrink the mic.
+    /// devices): hide the inline Title field and channel picker, shrink the mic.
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     private var isCompact: Bool { verticalSizeClass == .compact }
@@ -37,10 +38,7 @@ struct CaptureView: View {
         NavigationStack {
             VStack(spacing: isCompact ? 8 : 12) {
                 if !isCompact {
-                    TextField("Subject", text: $store.draft.subject)
-                        .font(.headline)
-                        .textFieldStyle(.roundedBorder)
-                        .padding(.horizontal)
+                    authoringHeader
                 }
 
                 DraftEditorView(
@@ -52,30 +50,21 @@ struct CaptureView: View {
                 )
                 .padding(.horizontal)
 
-                if !isCompact {
-                    PostTargetPicker(
-                        servers: serverStore.signedInServers,
-                        channelsByServer: store.channelsByServer,
-                        selection: $store.target
-                    )
-                    .padding(.horizontal)
-                }
-
                 controlBar
             }
-            .navigationTitle("New post")
+            .navigationTitle("Write post")
             #if os(iOS)
             .navigationBarTitleDisplayMode(isCompact ? .inline : .automatic)
             #endif
             .toolbar {
-                // In compact layouts the Subject field is hidden inline; expose it here.
+                // In compact layouts the Title field is hidden inline; expose it here.
                 if isCompact {
                     ToolbarItem(placement: .principal) {
                         Button {
-                            showSubjectEditor = true
+                            showTitleEditor = true
                         } label: {
                             Label(
-                                store.draft.subject.isEmpty ? "Subject" : store.draft.subject,
+                                store.draft.subject.isEmpty ? "Title" : store.draft.subject,
                                 systemImage: "textformat"
                             )
                             .lineLimit(1)
@@ -108,8 +97,8 @@ struct CaptureView: View {
             .sheet(isPresented: $showServers) {
                 ServerListView()
             }
-            .sheet(isPresented: $showSubjectEditor) {
-                SubjectEditorSheet(subject: $store.draft.subject)
+            .sheet(isPresented: $showTitleEditor) {
+                TitleEditorSheet(title: $store.draft.subject)
                     .presentationDetents([.height(160)])
             }
             .alert("Microphone access needed", isPresented: $showMicPermissionAlert) {
@@ -117,10 +106,15 @@ struct CaptureView: View {
             } message: {
                 Text("Enable microphone and speech recognition in Settings to dictate.")
             }
-            .alert("Posted", isPresented: .constant(submittedURL != nil)) {
-                Button("OK") { submittedURL = nil }
+            .alert("Post sent", isPresented: .constant(submittedURL != nil)) {
+                Button("Write another") { submittedURL = nil }
             } message: {
-                Text(submittedURL ?? "")
+                Text("Your draft was cleared. You’re back on this write-and-send screen for the next post.\n\n\(submittedURL ?? "")")
+            }
+            .alert("Couldn’t continue", isPresented: $showError) {
+                Button("OK") { store.lastError = nil }
+            } message: {
+                Text(store.lastError ?? "")
             }
             .task {
                 await store.loadChannels()
@@ -133,8 +127,38 @@ struct CaptureView: View {
         }
     }
 
+    private var authoringHeader: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            PostTargetPicker(
+                servers: serverStore.signedInServers,
+                channelsByServer: store.channelsByServer,
+                selection: $store.target
+            )
+
+            TextField("Title", text: $store.draft.subject)
+                .font(.headline)
+                .textFieldStyle(.roundedBorder)
+
+            Text("Tap the mic to dictate. Tap New section between thoughts; sections are sent as four dashes (----). Select text to add a colortext footnote.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if serverStore.signedInServers.isEmpty {
+                Button("Add or sign in to a server", systemImage: "server.rack") {
+                    showServers = true
+                }
+                .font(.caption)
+            } else if store.targetServer == nil {
+                Text("Choose a server and channel before posting.")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+        }
+        .padding(.horizontal)
+    }
+
     private var controlBar: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: isCompact ? 8 : 10) {
             // Compact layouts hide the inline channel picker; surface it here as a
             // compact menu so the destination is still one tap away.
             if isCompact {
@@ -147,15 +171,31 @@ struct CaptureView: View {
                 .buttonStyle(.bordered)
             }
 
-            HStack(spacing: isCompact ? 16 : 24) {
+            HStack(spacing: 12) {
                 Button {
                     showColorPicker = true
                 } label: {
-                    Label("Footnote", systemImage: "character.bubble")
-                        .labelStyle(.iconOnly)
+                    actionLabel("Footnote", systemImage: "character.bubble")
                 }
                 .disabled(selectedRange == nil)
 
+                Button {
+                    store.insertSectionBreak()
+                } label: {
+                    actionLabel("New section", systemImage: "text.badge.plus")
+                }
+                .disabled(store.draft.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                Button {
+                    Task { await runPreview() }
+                } label: {
+                    actionLabel("Preview", systemImage: "eye")
+                }
+                .disabled(store.draft.isEmpty || store.targetServer == nil)
+            }
+            .buttonStyle(.bordered)
+
+            HStack(spacing: isCompact ? 16 : 24) {
                 Spacer()
 
                 MicButton(isRecording: stt.isRecording, size: isCompact ? 56 : 80) {
@@ -164,19 +204,22 @@ struct CaptureView: View {
 
                 Spacer()
 
-                Button {
-                    Task { await runPreview() }
-                } label: {
-                    Label("Preview", systemImage: "eye")
-                        .labelStyle(.iconOnly)
-                }
-                .disabled(store.draft.isEmpty)
-
                 submitButton
             }
         }
         .padding(.horizontal)
         .padding(.bottom, 8)
+    }
+
+    @ViewBuilder
+    private func actionLabel(_ title: String, systemImage: String) -> some View {
+        if isCompact {
+            Label(title, systemImage: systemImage)
+                .labelStyle(.iconOnly)
+        } else {
+            Label(title, systemImage: systemImage)
+                .labelStyle(.titleAndIcon)
+        }
     }
 
     private var submitButton: some View {
@@ -190,7 +233,7 @@ struct CaptureView: View {
             }
         }
         .buttonStyle(.borderedProminent)
-        .disabled(store.draft.isEmpty || store.isSubmitting)
+        .disabled(store.draft.isEmpty || store.targetServer == nil || store.isSubmitting)
     }
 
     // MARK: - Actions
@@ -215,13 +258,19 @@ struct CaptureView: View {
 
     private func runPreview() async {
         previewHTML = await store.preview()
-        if previewHTML != nil { showPreview = true }
+        if previewHTML != nil {
+            showPreview = true
+        } else if store.lastError != nil {
+            showError = true
+        }
     }
 
     private func submit() async {
         if stt.isRecording { stt.stop() }
         if let created = await store.submit() {
             submittedURL = created.url
+        } else if store.lastError != nil {
+            showError = true
         }
     }
 
@@ -234,21 +283,21 @@ struct CaptureView: View {
     }
 }
 
-/// Small sheet for editing the post subject when the inline field is hidden in
+/// Small sheet for editing the post title when the inline field is hidden in
 /// compact (landscape) layouts.
-private struct SubjectEditorSheet: View {
-    @Binding var subject: String
+private struct TitleEditorSheet: View {
+    @Binding var title: String
     @Environment(\.dismiss) private var dismiss
     @FocusState private var focused: Bool
 
     var body: some View {
         NavigationStack {
-            TextField("Subject", text: $subject)
+            TextField("Title", text: $title)
                 .font(.headline)
                 .textFieldStyle(.roundedBorder)
                 .focused($focused)
                 .padding()
-                .navigationTitle("Subject")
+                .navigationTitle("Title")
                 #if os(iOS)
                 .navigationBarTitleDisplayMode(.inline)
                 #endif

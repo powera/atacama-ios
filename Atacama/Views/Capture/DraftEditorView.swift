@@ -26,21 +26,33 @@ struct DraftEditorView: View {
     /// Toggle dictation from the keyboard accessory bar. Lets the author switch from
     /// typing back to voice without hunting for the mic beneath the keyboard.
     var onToggleDictation: (() -> Void)?
+    /// Instructional empty-state text inside the editor.
+    var placeholder = "Tap the mic and start talking. Use New section between sections."
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            #if os(iOS)
-            SelectableTextEditor(
-                text: $text,
-                selectedRange: $selectedRange,
-                isRecording: isRecording,
-                onToggleDictation: onToggleDictation
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            #else
-            TextEditor(text: $text)
+            ZStack(alignment: .topLeading) {
+                #if os(iOS)
+                SelectableTextEditor(
+                    text: $text,
+                    selectedRange: $selectedRange,
+                    isRecording: isRecording,
+                    onToggleDictation: onToggleDictation
+                )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            #endif
+                #else
+                TextEditor(text: $text)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                #endif
+
+                if text.isEmpty && liveTranscript.isEmpty {
+                    Text(placeholder)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 10)
+                        .allowsHitTesting(false)
+                }
+            }
 
             if !liveTranscript.isEmpty {
                 Text(liveTranscript)

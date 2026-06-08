@@ -44,9 +44,15 @@ final class DraftStore: ObservableObject {
         if draft.body.isEmpty {
             draft.body = trimmed
         } else {
-            draft.body += " " + trimmed
+            let separator = draft.body.hasSuffix(" ") || draft.body.hasSuffix("\n") ? "" : " "
+            draft.body += separator + trimmed
         }
         draft.updatedAt = Date()
+    }
+
+    /// Insert the four-dash AML section divider used between dictated sections.
+    func insertSectionBreak() {
+        draft = draft.appendingSectionBreak()
     }
 
     /// Wrap a selected range of the body in a colortext footnote.
