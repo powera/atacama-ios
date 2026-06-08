@@ -37,7 +37,8 @@ enum AuthenticationService {
     static func loginURL(baseURL: String, loginPath: String = "/login") -> URL {
         let redirect = "\(atacamaCallbackScheme)://auth-callback"
         let path = loginPath.hasPrefix("/") ? loginPath : "/" + loginPath
-        return URL(string: "\(baseURL)\(path)?mobile=1&redirect=\(redirect)")!
+        let secureBaseURL = TransportSecurity.normalizedBaseURL(baseURL)
+        return URL(string: "\(secureBaseURL)\(path)?mobile=1&redirect=\(redirect)")!
     }
 
     /// Extract the bearer token from the OAuth callback URL.

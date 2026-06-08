@@ -26,8 +26,10 @@ final class ServerStore: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        self.servers = Self.decode([ServerConfig].self, from: defaults, key: serversKey) ?? []
+        self.servers = (Self.decode([ServerConfig].self, from: defaults, key: serversKey) ?? [])
+            .map { $0.usingSecureTransportDefaults() }
         self.defaultTarget = Self.decode(PostTarget.self, from: defaults, key: defaultTargetKey)
+        persist()
     }
 
     // MARK: - Lookup
@@ -48,13 +50,12 @@ final class ServerStore: ObservableObject {
     /// ServerConfig, persist it, and return it. Throws if discovery fails.
     @discardableResult
     func add(baseURL: String) async throws -> ServerConfig {
-        let trimmed = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalized = trimmed.hasSuffix("/") ? String(trimmed.dropLast()) : trimmed
+        let normalized = TransportSecurity.normalizedBaseURL(baseURL)
         let response = try await APIClient.shared.serverConfig(baseURL: normalized)
         let server = ServerConfig(
             baseURL: normalized,
             name: response.name.isEmpty ? host(of: response.apiBase) : response.name,
-            apiBase: response.apiBase,
+            apiBase: TransportSecurity.normalizedBaseURL(response.apiBase),
             authType: response.auth.type,
             loginPath: response.auth.loginPath
         )

@@ -114,7 +114,10 @@ final class APIClient {
     // MARK: - Helpers
 
     private func fullURL(for endpoint: String, base: String) -> String {
-        endpoint.hasPrefix("http") ? endpoint : base + endpoint
+        let urlString = endpoint.hasPrefix("http")
+            ? endpoint
+            : TransportSecurity.normalizedBaseURL(base) + endpoint
+        return TransportSecurity.normalizedURLString(urlString)
     }
 
     private func applyCommonHeaders(to request: inout URLRequest, token: String?) {
@@ -167,8 +170,7 @@ extension APIClient {
     /// Fetch a server's self-describing config (unauthenticated). Used when adding
     /// a server by base URL. GET <baseURL>/api/atacama-config.
     func serverConfig(baseURL: String) async throws -> ServerConfigResponse {
-        let trimmed = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        let base = trimmed.hasSuffix("/") ? String(trimmed.dropLast()) : trimmed
+        let base = TransportSecurity.normalizedBaseURL(baseURL)
         return try await get("/api/atacama-config", base: base, token: nil)
     }
 }
