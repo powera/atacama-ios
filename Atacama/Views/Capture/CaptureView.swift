@@ -5,10 +5,9 @@
 //  The primary authoring screen: choose a destination, enter a title, dictate
 //  sections, add colortext footnotes to selected text, preview, and submit.
 //
-//  Layout: an inline navigation title keeps the chrome small, a compact header
-//  (destination + title) sits up top, the draft editor fills all remaining space,
-//  and the mic/post controls live in a bottom bar pinned via `safeAreaInset` so they
-//  stay above the keyboard and reachable on any screen size.
+//  Layout is intentionally iPhone-first: title + destination are compact setup
+//  fields, the draft editor gets the flexible space, and secondary actions live in a
+//  Tools menu so they cannot truncate into unusable one-letter buttons.
 //
 
 import SwiftUI
@@ -31,16 +30,19 @@ struct CaptureView: View {
     @State private var submittedURL: String?
     @State private var showServers = false
     @State private var showError = false
+    @State private var keyboardVisible = false
 
-    /// Compact vertical space (landscape, or the keyboard up on small devices): drop the
-    /// instructional hint and shrink the mic so the editor keeps the most room.
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// Compact vertical space (landscape, or the keyboard up on small devices): shrink
+    /// chrome so the editor keeps the most room.
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
-    private var isCompact: Bool { verticalSizeClass == .compact }
+    private var isCompact: Bool { verticalSizeClass == .compact || keyboardVisible }
+    private var micSize: CGFloat { dynamicTypeSize.isAccessibilitySize || isCompact ? 56 : 68 }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: isCompact ? 8 : 12) {
+            VStack(spacing: 8) {
                 authoringHeader
 
                 DraftEditorView(
@@ -50,32 +52,22 @@ struct CaptureView: View {
                     isRecording: stt.isRecording,
                     onToggleDictation: { Task { await toggleDictation() } }
                 )
+                .frame(maxWidth: .infinity, minHeight: 160, maxHeight: .infinity)
+                .layoutPriority(1)
             }
-            .padding(.horizontal)
-            .padding(.top, 8)
+            .padding(.horizontal, 12)
+            .padding(.top, 6)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .navigationTitle("Write post")
             #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.hidden, for: .navigationBar)
             #endif
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        Button("Read draft aloud", systemImage: "speaker.wave.2") {
-                            tts.speak(store.draft.body)
-                        }
-                        Button("Servers…", systemImage: "server.rack") {
-                            showServers = true
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                    }
-                }
-            }
-            // Pin the mic/post controls to the bottom. As a safe-area inset they ride
-            // above the keyboard, so they stay reachable while hand-editing.
+            // When a hardware/software keyboard is active, give the visible area to the
+            // focused field/editor. The editor itself supplies a tiny keyboard accessory
+            // with mic + Done, so the full bottom bar is not needed above the keyboard.
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                controlBar
+                if !keyboardVisible {
+                    controlBar
+                }
             }
             .sheet(isPresented: $showColorPicker) {
                 ColorTagPickerView { tag in
@@ -113,94 +105,103 @@ struct CaptureView: View {
             .onChange(of: session.signedInServerIDs) {
                 Task { await store.loadChannels() }
             }
+            #if os(iOS)
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                keyboardVisible = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+                keyboardVisible = false
+            }
+            #endif
         }
     }
 
     private var authoringHeader: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            PostTargetPicker(
-                servers: serverStore.signedInServers,
-                channelsByServer: store.channelsByServer,
-                selection: $store.target,
-                onManageServers: { showServers = true }
-            )
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Text("Write post")
+                    .font(.headline.weight(.semibold))
+                Spacer(minLength: 8)
+                headerMenu
+            }
 
             TextField("Title", text: $store.draft.subject)
                 .font(.headline)
                 .textFieldStyle(.roundedBorder)
+                .submitLabel(.next)
 
-            if !isCompact {
-                Text("Tap the mic to dictate. Tap New section between thoughts (sent as ----). Select text to add a colortext footnote.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            PostTargetPicker(
+                servers: serverStore.signedInServers,
+                channelsByServer: store.channelsByServer,
+                isLoading: store.isLoadingChannels,
+                errorsByServer: store.channelErrorsByServer,
+                selection: $store.target,
+                onManageServers: { showServers = true },
+                onRetry: { Task { await store.loadChannels() } }
+            )
         }
     }
 
-    private var controlBar: some View {
-        VStack(spacing: isCompact ? 8 : 12) {
-            HStack(spacing: 10) {
-                actionButton(
-                    "Footnote",
-                    systemImage: "character.bubble",
-                    disabled: selectedRange == nil
-                ) { showColorPicker = true }
-
-                actionButton(
-                    "New section",
-                    systemImage: "text.badge.plus",
-                    disabled: store.draft.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ) { store.insertSectionBreak() }
-
-                actionButton(
-                    "Preview",
-                    systemImage: "eye",
-                    disabled: store.draft.isEmpty || store.targetServer == nil
-                ) { Task { await runPreview() } }
+    private var headerMenu: some View {
+        Menu {
+            Button("Read draft aloud", systemImage: "speaker.wave.2") {
+                tts.speak(store.draft.body)
             }
-
-            // Mic centered, Post trailing — Post stays put regardless of mic size.
-            ZStack {
-                MicButton(isRecording: stt.isRecording, size: isCompact ? 52 : 72) {
-                    Task { await toggleDictation() }
-                }
-                HStack {
-                    Spacer()
-                    submitButton
-                }
+            Button("Servers…", systemImage: "server.rack") {
+                showServers = true
             }
+        } label: {
+            Label("More", systemImage: "ellipsis.circle")
+                .labelStyle(.iconOnly)
+                .font(.title3)
         }
-        .padding(.horizontal)
-        .padding(.top, isCompact ? 8 : 12)
-        .padding(.bottom, 6)
+        .accessibilityLabel("More options")
+    }
+
+    private var controlBar: some View {
+        HStack(spacing: 12) {
+            toolsMenu
+                .frame(minWidth: 70, alignment: .leading)
+
+            Spacer(minLength: 0)
+
+            MicButton(isRecording: stt.isRecording, size: micSize) {
+                Task { await toggleDictation() }
+            }
+
+            Spacer(minLength: 0)
+
+            submitButton
+                .frame(minWidth: 70, alignment: .trailing)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .frame(maxWidth: .infinity)
         .background(.bar)
     }
 
-    /// One of the bordered editing actions. Equal-width and scaling so the labels show
-    /// fully on roomy screens and degrade gracefully instead of clipping to one letter.
-    private func actionButton(
-        _ title: String,
-        systemImage: String,
-        disabled: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Group {
-                // A ternary can't unify the two concrete LabelStyle types, so branch.
-                if isCompact {
-                    Label(title, systemImage: systemImage).labelStyle(.iconOnly)
-                } else {
-                    Label(title, systemImage: systemImage).labelStyle(.titleAndIcon)
-                }
+    private var toolsMenu: some View {
+        Menu {
+            Button("Hide selected text", systemImage: "character.bubble") {
+                showColorPicker = true
             }
-            .lineLimit(1)
-            .minimumScaleFactor(0.75)
-            .frame(maxWidth: .infinity)
+            .disabled(selectedRange == nil)
+
+            Button("New section", systemImage: "text.badge.plus") {
+                store.insertSectionBreak()
+            }
+            .disabled(store.draft.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+            Button("Preview", systemImage: "eye") {
+                Task { await runPreview() }
+            }
+            .disabled(store.draft.isEmpty || store.targetServer == nil)
+        } label: {
+            Label("Tools", systemImage: "slider.horizontal.3")
+                .lineLimit(1)
         }
         .buttonStyle(.bordered)
-        .disabled(disabled)
+        .controlSize(.regular)
     }
 
     private var submitButton: some View {

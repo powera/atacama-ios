@@ -21,6 +21,11 @@ final class DraftStore: ObservableObject {
     @Published var target: PostTarget?
     /// Channels available per server, loaded from each signed-in server.
     @Published private(set) var channelsByServer: [UUID: [Channel]] = [:]
+    /// Whether the capture screen is currently refreshing server channel lists.
+    @Published private(set) var isLoadingChannels = false
+    /// Per-server channel load failures, surfaced in the destination picker so an
+    /// empty picker distinguishes client/server/auth problems from a real empty list.
+    @Published private(set) var channelErrorsByServer: [UUID: String] = [:]
     @Published var isSubmitting = false
     @Published var lastError: String?
 
@@ -71,18 +76,32 @@ final class DraftStore: ObservableObject {
     /// if none is selected yet.
     func loadChannels() async {
         let servers = ServerStore.shared.signedInServers
+        let signedInServerIDs = Set(servers.map(\.id))
+        channelsByServer = channelsByServer.filter { signedInServerIDs.contains($0.key) }
+        channelErrorsByServer = channelErrorsByServer.filter { signedInServerIDs.contains($0.key) }
+        guard !servers.isEmpty else { return }
+
+        isLoadingChannels = true
+        defer { isLoadingChannels = false }
+
         for server in servers {
             do {
                 let list = try await APIClient.shared.channels(on: server)
                 channelsByServer[server.id] = list.channels
+                channelErrorsByServer[server.id] = nil
+
+                let defaultChannel = list.default ?? list.channels.first?.name
                 // Seed a default target if we don't have a valid one yet.
                 if target == nil {
-                    target = PostTarget(serverID: server.id, channel: list.default)
+                    target = PostTarget(serverID: server.id, channel: defaultChannel)
                 } else if target?.serverID == server.id, target?.channel == nil {
-                    target?.channel = list.default
+                    target?.channel = defaultChannel
                 }
             } catch {
-                lastError = (error as? APIError)?.errorDescription ?? error.localizedDescription
+                let message = (error as? APIError)?.errorDescription ?? error.localizedDescription
+                channelsByServer[server.id] = []
+                channelErrorsByServer[server.id] = message
+                lastError = "Couldn’t load channels for \(server.name): \(message)"
             }
         }
     }

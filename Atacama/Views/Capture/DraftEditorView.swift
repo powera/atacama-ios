@@ -27,7 +27,7 @@ struct DraftEditorView: View {
     /// typing back to voice without hunting for the mic beneath the keyboard.
     var onToggleDictation: (() -> Void)?
     /// Instructional empty-state text inside the editor.
-    var placeholder = "Tap the mic and start talking. Use New section between sections."
+    var placeholder = "Type or dictate. Select text, then Tools > Hide selected text for a colortext note."
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -47,7 +47,9 @@ struct DraftEditorView: View {
 
                 if text.isEmpty && liveTranscript.isEmpty {
                     Text(placeholder)
+                        .font(.body)
                         .foregroundStyle(.secondary)
+                        .lineLimit(2)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 10)
                         .allowsHitTesting(false)

@@ -16,22 +16,37 @@ struct PostTargetPicker: View {
     let servers: [ServerConfig]
     /// Channels available per server id (from DraftStore.channelsByServer).
     let channelsByServer: [UUID: [Channel]]
+    /// Whether a channel refresh is currently in flight.
+    var isLoading = false
+    /// Channel load failures keyed by server id, surfaced directly in the menu.
+    var errorsByServer: [UUID: String] = [:]
     @Binding var selection: PostTarget?
     /// Invoked from the menu to add or sign in to servers — the only path forward when
     /// no channels are available yet.
     var onManageServers: () -> Void = {}
+    /// Invoked from the menu to retry GET /api/channels.
+    var onRetry: () -> Void = {}
 
     var body: some View {
         Menu {
             if hasAnyChannels {
-                Picker("Post to", selection: $selection) {
+                Picker("Channel", selection: $selection) {
                     pickerOptions
                 }
+            } else if isLoading {
+                Label("Loading channels…", systemImage: "arrow.triangle.2.circlepath")
+            } else if !errorsByServer.isEmpty {
+                errorOptions
+            } else if servers.isEmpty {
+                Text("No signed-in server")
             } else {
-                Text("No channels available yet")
+                Text("No channels returned")
             }
+
             Divider()
-            Button("Add or sign in to a server…", systemImage: "server.rack", action: onManageServers)
+            Button("Reload channels", systemImage: "arrow.clockwise", action: onRetry)
+                .disabled(servers.isEmpty || isLoading)
+            Button("Servers…", systemImage: "server.rack", action: onManageServers)
         } label: {
             label
         }
@@ -40,26 +55,28 @@ struct PostTargetPicker: View {
 
     /// The persistent, obviously-tappable button face.
     private var label: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "paperplane.fill")
+        HStack(spacing: 8) {
+            Image(systemName: statusIcon)
                 .font(.subheadline)
-                .foregroundStyle(.tint)
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Post to")
+                .foregroundStyle(statusColor)
+                .frame(width: 22)
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Destination")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                 Text(currentLabel)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(isChosen ? Color.primary : Color.accentColor)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(statusColor)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
-            Spacer(minLength: 8)
+            Spacer(minLength: 6)
             Image(systemName: "chevron.up.chevron.down")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
         .frame(maxWidth: .infinity)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .contentShape(Rectangle())
@@ -80,6 +97,17 @@ struct PostTargetPicker: View {
         }
     }
 
+    @ViewBuilder
+    private var errorOptions: some View {
+        ForEach(servers) { server in
+            if let error = errorsByServer[server.id] {
+                Section(server.name) {
+                    Label(shortError(error), systemImage: "exclamationmark.triangle")
+                }
+            }
+        }
+    }
+
     /// Whether the current selection points at a known signed-in server.
     private var isChosen: Bool {
         guard let selection else { return false }
@@ -90,11 +118,24 @@ struct PostTargetPicker: View {
         channelsByServer.values.contains { !$0.isEmpty }
     }
 
+    private var statusIcon: String {
+        if isLoading { return "arrow.triangle.2.circlepath" }
+        if !errorsByServer.isEmpty { return "exclamationmark.triangle.fill" }
+        return "paperplane.fill"
+    }
+
+    private var statusColor: Color {
+        if !errorsByServer.isEmpty { return .orange }
+        return isChosen ? .primary : .accentColor
+    }
+
     /// Short "server / channel" description of the current selection, or a prompt.
     private var currentLabel: String {
+        if isLoading && !hasAnyChannels { return "Loading channels…" }
+        if !errorsByServer.isEmpty && !hasAnyChannels { return "Channels failed" }
         guard isChosen, let selection,
               let server = servers.first(where: { $0.id == selection.serverID })
-        else { return "Choose destination" }
+        else { return "Choose server + channel" }
         guard let channel = selection.channel else {
             return "\(server.name) / default"
         }
@@ -109,5 +150,9 @@ struct PostTargetPicker: View {
             if $0.group != $1.group { return $0.group < $1.group }
             return $0.displayName < $1.displayName
         }
+    }
+
+    private func shortError(_ error: String) -> String {
+        error.count > 80 ? String(error.prefix(77)) + "…" : error
     }
 }
