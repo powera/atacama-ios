@@ -32,8 +32,8 @@ struct CaptureView: View {
     @State private var showServers = false
     @State private var showError = false
 
-    /// Compact vertical space (landscape, or the keyboard up on small devices): drop the
-    /// instructional hint and shrink the mic so the editor keeps the most room.
+    /// Compact vertical space (landscape, or the keyboard up on small devices): shrink
+    /// the authoring chrome and mic so the editor keeps the most room.
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var isKeyboardVisible = false
 
@@ -43,6 +43,10 @@ struct CaptureView: View {
     }
     private var shouldCollapseChrome: Bool { isCompact || isKeyboardVisible || hasPostMetadata }
     private var showsBottomControlBar: Bool { !isKeyboardVisible }
+    private var editorPlaceholder: String {
+        guard !isKeyboardVisible else { return "" }
+        return "Tap the mic to dictate. Tap New section between thoughts (sent as ----). Select text to add a colortext footnote."
+    }
 
     var body: some View {
         NavigationStack {
@@ -55,7 +59,8 @@ struct CaptureView: View {
                     liveTranscript: stt.transcript,
                     selectedRange: $selectedRange,
                     isRecording: stt.isRecording,
-                    onToggleDictation: { Task { await toggleDictation() } }
+                    onToggleDictation: { Task { await toggleDictation() } },
+                    placeholder: editorPlaceholder
                 )
                 .frame(minHeight: isKeyboardVisible ? 220 : 280, maxHeight: .infinity)
                 .layoutPriority(1)
@@ -138,44 +143,29 @@ struct CaptureView: View {
 
     private var authoringHeader: some View {
         VStack(alignment: .leading, spacing: shouldCollapseChrome ? 6 : 8) {
-            if shouldCollapseChrome {
-                compactPostMetadata
-            } else {
-                PostTargetPicker(
-                    servers: serverStore.signedInServers,
-                    channelsByServer: store.channelsByServer,
-                    selection: $store.target,
-                    onManageServers: { showServers = true }
-                )
-
-                TextField("Title", text: $store.draft.subject)
-                    .font(.headline)
-                    .textFieldStyle(.roundedBorder)
-
-                Text("Tap the mic to dictate. Tap New section between thoughts (sent as ----). Select text to add a colortext footnote.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            titleField
+            postTargetPicker
+                .controlSize(shouldCollapseChrome ? .small : .regular)
         }
-        .frame(maxHeight: shouldCollapseChrome ? 96 : 180, alignment: .top)
+        .frame(maxHeight: shouldCollapseChrome ? 96 : 132, alignment: .top)
         .clipped()
     }
 
-    private var compactPostMetadata: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            PostTargetPicker(
-                servers: serverStore.signedInServers,
-                channelsByServer: store.channelsByServer,
-                selection: $store.target,
-                onManageServers: { showServers = true }
-            )
-            .controlSize(.small)
+    private var titleField: some View {
+        TextField("Title", text: $store.draft.subject)
+            .font(shouldCollapseChrome ? .subheadline.weight(.semibold) : .headline)
+            .textFieldStyle(.roundedBorder)
+    }
 
-            TextField("Title", text: $store.draft.subject)
-                .font(.subheadline.weight(.semibold))
-                .textFieldStyle(.roundedBorder)
-        }
+    /// Combined server/channel setup. Kept immediately below title so all required
+    /// submission metadata is visible before any authoring instructions or editor chrome.
+    private var postTargetPicker: some View {
+        PostTargetPicker(
+            servers: serverStore.signedInServers,
+            channelsByServer: store.channelsByServer,
+            selection: $store.target,
+            onManageServers: { showServers = true }
+        )
     }
 
     private var controlBar: some View {
