@@ -38,6 +38,7 @@ struct CaptureView: View {
     @State private var submittedURL: String?
     @State private var showServers = false
     @State private var showError = false
+    @State private var showClearPostConfirmation = false
 
     /// Compact vertical space (landscape, or the keyboard up on small devices): shrink
     /// the authoring chrome and mic so the editor keeps the most room.
@@ -91,6 +92,10 @@ struct CaptureView: View {
                         Button("Servers…", systemImage: "server.rack") {
                             showServers = true
                         }
+                        Divider()
+                        Button("Clear post", systemImage: "trash", role: .destructive) {
+                            showClearPostConfirmation = true
+                        }
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
@@ -138,6 +143,12 @@ struct CaptureView: View {
                 Button("OK") { store.lastError = nil }
             } message: {
                 Text(store.lastError ?? "")
+            }
+            .alert("Clear this post?", isPresented: $showClearPostConfirmation) {
+                Button("Cancel", role: .cancel) {}
+                Button("Clear post", role: .destructive) { clearPost() }
+            } message: {
+                Text("This removes the title and body, clears the saved draft, and returns the destination to your default channel.")
             }
             .task {
                 await store.loadChannels()
@@ -327,6 +338,17 @@ struct CaptureView: View {
     /// words immediately (Stop, Preview, Post, or inserting a section).
     private func commitLiveTranscript() {
         store.appendUtterance(stt.consumeTranscript())
+    }
+
+    private func clearPost() {
+        if stt.isRecording { stt.stop() }
+        tts.stop()
+        previewHTML = nil
+        selectedRange = nil
+        footnoteInsertionOffset = nil
+        footnoteText = ""
+        store.clearPost()
+        dismissKeyboard()
     }
 
     private func dismissKeyboard() {
