@@ -10,6 +10,37 @@
 
 import Foundation
 
+/// Transport-security normalization for backend URLs. ATS blocks plain HTTP on
+/// device, so non-local HTTP URLs are upgraded to HTTPS before they are stored
+/// or requested. Localhost is left untouched for simulator/development servers.
+enum TransportSecurity {
+    static func normalizedBaseURL(_ urlString: String) -> String {
+        let trimmed = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+        let withoutTrailingSlash = trimmed.hasSuffix("/") ? String(trimmed.dropLast()) : trimmed
+        return normalizedURLString(withoutTrailingSlash)
+    }
+
+    static func normalizedURLString(_ urlString: String) -> String {
+        guard var components = URLComponents(string: urlString),
+              components.scheme?.lowercased() == "http",
+              let host = components.host,
+              !isLocalhost(host)
+        else {
+            return urlString
+        }
+
+        components.scheme = "https"
+        return components.string ?? urlString
+    }
+
+    private static func isLocalhost(_ host: String) -> Bool {
+        let normalizedHost = host.lowercased()
+        return normalizedHost == "localhost"
+            || normalizedHost == "127.0.0.1"
+            || normalizedHost == "::1"
+    }
+}
+
 /// A configured backend server, populated from its /api/atacama-config response.
 struct ServerConfig: Identifiable, Codable, Hashable {
     let id: UUID
@@ -43,6 +74,19 @@ struct ServerConfig: Identifiable, Codable, Hashable {
     /// Whether the app can currently sign in to this server. Only OAuth is wired
     /// up for now; password servers are shown but not yet signable.
     var supportsSignIn: Bool { authType == "oauth" }
+
+    /// Copy with ATS-safe base URLs. This also fixes servers saved before the
+    /// client enforced HTTPS for non-local backends.
+    func usingSecureTransportDefaults() -> ServerConfig {
+        ServerConfig(
+            id: id,
+            baseURL: TransportSecurity.normalizedBaseURL(baseURL),
+            name: name,
+            apiBase: TransportSecurity.normalizedBaseURL(apiBase),
+            authType: authType,
+            loginPath: loginPath
+        )
+    }
 }
 
 /// Where a post is sent: a configured server plus an optional channel name.
