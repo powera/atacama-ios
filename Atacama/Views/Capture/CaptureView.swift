@@ -5,6 +5,11 @@
 //  The primary authoring screen: choose a destination, enter a title, dictate
 //  sections, add colortext footnotes to selected text, preview, and submit.
 //
+//  Layout: an inline navigation title keeps the chrome small, a compact header
+//  (destination + title) sits up top, the draft editor fills all remaining space,
+//  and the mic/post controls live in a bottom bar pinned via `safeAreaInset` so they
+//  stay above the keyboard and reachable on any screen size.
+//
 
 import SwiftUI
 #if os(iOS)
@@ -25,11 +30,10 @@ struct CaptureView: View {
     @State private var showMicPermissionAlert = false
     @State private var submittedURL: String?
     @State private var showServers = false
-    @State private var showTitleEditor = false
     @State private var showError = false
 
-    /// Compact vertical space (landscape, or portrait with the keyboard up on small
-    /// devices): hide the inline Title field and channel picker, shrink the mic.
+    /// Compact vertical space (landscape, or the keyboard up on small devices): drop the
+    /// instructional hint and shrink the mic so the editor keeps the most room.
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     private var isCompact: Bool { verticalSizeClass == .compact }
@@ -37,9 +41,7 @@ struct CaptureView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: isCompact ? 8 : 12) {
-                if !isCompact {
-                    authoringHeader
-                }
+                authoringHeader
 
                 DraftEditorView(
                     text: $store.draft.body,
@@ -48,29 +50,15 @@ struct CaptureView: View {
                     isRecording: stt.isRecording,
                     onToggleDictation: { Task { await toggleDictation() } }
                 )
-                .padding(.horizontal)
-
-                controlBar
             }
+            .padding(.horizontal)
+            .padding(.top, 8)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .navigationTitle("Write post")
             #if os(iOS)
-            .navigationBarTitleDisplayMode(isCompact ? .inline : .automatic)
+            .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
-                // In compact layouts the Title field is hidden inline; expose it here.
-                if isCompact {
-                    ToolbarItem(placement: .principal) {
-                        Button {
-                            showTitleEditor = true
-                        } label: {
-                            Label(
-                                store.draft.subject.isEmpty ? "Title" : store.draft.subject,
-                                systemImage: "textformat"
-                            )
-                            .lineLimit(1)
-                        }
-                    }
-                }
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
                         Button("Read draft aloud", systemImage: "speaker.wave.2") {
@@ -84,6 +72,11 @@ struct CaptureView: View {
                     }
                 }
             }
+            // Pin the mic/post controls to the bottom. As a safe-area inset they ride
+            // above the keyboard, so they stay reachable while hand-editing.
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                controlBar
+            }
             .sheet(isPresented: $showColorPicker) {
                 ColorTagPickerView { tag in
                     if let range = selectedRange {
@@ -96,10 +89,6 @@ struct CaptureView: View {
             }
             .sheet(isPresented: $showServers) {
                 ServerListView()
-            }
-            .sheet(isPresented: $showTitleEditor) {
-                TitleEditorSheet(title: $store.draft.subject)
-                    .presentationDetents([.height(160)])
             }
             .alert("Microphone access needed", isPresented: $showMicPermissionAlert) {
                 Button("OK", role: .cancel) {}
@@ -132,94 +121,80 @@ struct CaptureView: View {
             PostTargetPicker(
                 servers: serverStore.signedInServers,
                 channelsByServer: store.channelsByServer,
-                selection: $store.target
+                selection: $store.target,
+                onManageServers: { showServers = true }
             )
 
             TextField("Title", text: $store.draft.subject)
                 .font(.headline)
                 .textFieldStyle(.roundedBorder)
 
-            Text("Tap the mic to dictate. Tap New section between thoughts; sections are sent as four dashes (----). Select text to add a colortext footnote.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            if serverStore.signedInServers.isEmpty {
-                Button("Add or sign in to a server", systemImage: "server.rack") {
-                    showServers = true
-                }
-                .font(.caption)
-            } else if store.targetServer == nil {
-                Text("Choose a server and channel before posting.")
+            if !isCompact {
+                Text("Tap the mic to dictate. Tap New section between thoughts (sent as ----). Select text to add a colortext footnote.")
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(.horizontal)
     }
 
     private var controlBar: some View {
-        VStack(spacing: isCompact ? 8 : 10) {
-            // Compact layouts hide the inline channel picker; surface it here as a
-            // compact menu so the destination is still one tap away.
-            if isCompact {
-                PostTargetPicker(
-                    servers: serverStore.signedInServers,
-                    channelsByServer: store.channelsByServer,
-                    selection: $store.target,
-                    style: .compact
-                )
-                .buttonStyle(.bordered)
+        VStack(spacing: isCompact ? 8 : 12) {
+            HStack(spacing: 10) {
+                actionButton(
+                    "Footnote",
+                    systemImage: "character.bubble",
+                    disabled: selectedRange == nil
+                ) { showColorPicker = true }
+
+                actionButton(
+                    "New section",
+                    systemImage: "text.badge.plus",
+                    disabled: store.draft.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ) { store.insertSectionBreak() }
+
+                actionButton(
+                    "Preview",
+                    systemImage: "eye",
+                    disabled: store.draft.isEmpty || store.targetServer == nil
+                ) { Task { await runPreview() } }
             }
 
-            HStack(spacing: 12) {
-                Button {
-                    showColorPicker = true
-                } label: {
-                    actionLabel("Footnote", systemImage: "character.bubble")
-                }
-                .disabled(selectedRange == nil)
-
-                Button {
-                    store.insertSectionBreak()
-                } label: {
-                    actionLabel("New section", systemImage: "text.badge.plus")
-                }
-                .disabled(store.draft.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                Button {
-                    Task { await runPreview() }
-                } label: {
-                    actionLabel("Preview", systemImage: "eye")
-                }
-                .disabled(store.draft.isEmpty || store.targetServer == nil)
-            }
-            .buttonStyle(.bordered)
-
-            HStack(spacing: isCompact ? 16 : 24) {
-                Spacer()
-
-                MicButton(isRecording: stt.isRecording, size: isCompact ? 56 : 80) {
+            // Mic centered, Post trailing — Post stays put regardless of mic size.
+            ZStack {
+                MicButton(isRecording: stt.isRecording, size: isCompact ? 52 : 72) {
                     Task { await toggleDictation() }
                 }
-
-                Spacer()
-
-                submitButton
+                HStack {
+                    Spacer()
+                    submitButton
+                }
             }
         }
         .padding(.horizontal)
-        .padding(.bottom, 8)
+        .padding(.top, isCompact ? 8 : 12)
+        .padding(.bottom, 6)
+        .frame(maxWidth: .infinity)
+        .background(.bar)
     }
 
-    @ViewBuilder
-    private func actionLabel(_ title: String, systemImage: String) -> some View {
-        if isCompact {
+    /// One of the bordered editing actions. Equal-width and scaling so the labels show
+    /// fully on roomy screens and degrade gracefully instead of clipping to one letter.
+    private func actionButton(
+        _ title: String,
+        systemImage: String,
+        disabled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
             Label(title, systemImage: systemImage)
-                .labelStyle(.iconOnly)
-        } else {
-            Label(title, systemImage: systemImage)
-                .labelStyle(.titleAndIcon)
+                .labelStyle(isCompact ? .iconOnly : .titleAndIcon)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .frame(maxWidth: .infinity)
         }
+        .buttonStyle(.bordered)
+        .disabled(disabled)
     }
 
     private var submitButton: some View {
@@ -280,34 +255,6 @@ struct CaptureView: View {
             #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil
         )
         #endif
-    }
-}
-
-/// Small sheet for editing the post title when the inline field is hidden in
-/// compact (landscape) layouts.
-private struct TitleEditorSheet: View {
-    @Binding var title: String
-    @Environment(\.dismiss) private var dismiss
-    @FocusState private var focused: Bool
-
-    var body: some View {
-        NavigationStack {
-            TextField("Title", text: $title)
-                .font(.headline)
-                .textFieldStyle(.roundedBorder)
-                .focused($focused)
-                .padding()
-                .navigationTitle("Title")
-                #if os(iOS)
-                .navigationBarTitleDisplayMode(.inline)
-                #endif
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { dismiss() }
-                    }
-                }
-                .onAppear { focused = true }
-        }
     }
 }
 
