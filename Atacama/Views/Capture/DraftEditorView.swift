@@ -3,7 +3,7 @@
 //  Atacama
 //
 //  Editable draft body with a live dictation transcript appended below. Exposes the
-//  current text selection so the capture screen can wrap it in a colortext footnote.
+//  current caret/selection so the capture screen can insert a colortext footnote.
 //
 //  Text selection: a UITextView-backed editor is used so we can read the selected
 //  range reliably across iOS versions (SwiftUI's TextEditor only exposes selection
@@ -19,16 +19,18 @@ struct DraftEditorView: View {
     @Binding var text: String
     /// Live partial transcript from STT, shown faded below the committed text.
     let liveTranscript: String
-    /// Reports the current selection as a character-offset range into `text`, or nil.
-    /// Offsets (not `String.Index`) are used because the range is consumed against a
-    /// different `String` instance, and indices aren't transferable between instances.
+    /// Reports the current caret/selection as a character-offset range into `text`, or
+    /// nil when the editor has not reported a cursor yet. Empty ranges represent the
+    /// caret location where a new footnote should be inserted. Offsets (not
+    /// `String.Index`) are used because the range is consumed against a different
+    /// `String` instance, and indices aren't transferable between instances.
     @Binding var selectedRange: Range<Int>?
     /// Whether dictation is currently active (reflected in the keyboard accessory mic).
     var isRecording: Bool = false
     /// Toggle dictation from the keyboard accessory bar. Lets the author switch from
     /// typing back to voice without hunting for the mic beneath the keyboard.
     var onToggleDictation: (() -> Void)?
-    /// Starts the footnote picker from the keyboard accessory before selection is lost.
+    /// Starts the footnote picker from the keyboard accessory before the caret is lost.
     var onAddFootnote: (() -> Void)?
     /// Instructional empty-state text inside the editor.
     var placeholder = "Tap the mic and start talking. Use New section between sections."
@@ -72,7 +74,7 @@ struct DraftEditorView: View {
 }
 
 #if os(iOS)
-/// A UITextView wrapper that surfaces the selected text range as a String index range.
+/// A UITextView wrapper that surfaces the caret/selected text range as a String index range.
 private struct SelectableTextEditor: UIViewRepresentable {
     @Binding var text: String
     @Binding var selectedRange: Range<Int>?
@@ -114,7 +116,7 @@ private struct SelectableTextEditor: UIViewRepresentable {
         }
 
         /// Builds the bar shown above the keyboard while hand-editing: a mic toggle,
-        /// a footnote action that can use the active selection before it is cleared,
+        /// a footnote action that can use the active caret before it is cleared,
         /// and a Done button to dismiss.
         func makeAccessoryView() -> UIToolbar {
             let bar = UIToolbar()
@@ -134,7 +136,7 @@ private struct SelectableTextEditor: UIViewRepresentable {
                 action: #selector(addFootnote)
             )
             footnote.accessibilityLabel = "Add footnote"
-            footnote.isEnabled = false
+            footnote.isEnabled = true
             self.footnoteButton = footnote
             let spacer = UIBarButtonItem(systemItem: .flexibleSpace)
             let done = UIBarButtonItem(
@@ -149,7 +151,7 @@ private struct SelectableTextEditor: UIViewRepresentable {
         func updateAccessory(isRecording: Bool) {
             micButton?.image = UIImage(systemName: isRecording ? "stop.fill" : "mic.fill")
             micButton?.accessibilityLabel = isRecording ? "Stop dictation" : "Start dictation"
-            footnoteButton?.isEnabled = parent.selectedRange != nil
+            footnoteButton?.isEnabled = true
         }
 
         @objc private func toggleDictation() {
@@ -171,30 +173,30 @@ private struct SelectableTextEditor: UIViewRepresentable {
         }
 
         func textViewDidChangeSelection(_ textView: UITextView) {
-            guard let selected = textView.selectedTextRange, !selected.isEmpty else {
+            guard let selected = textView.selectedTextRange else {
                 parent.selectedRange = nil
-                footnoteButton?.isEnabled = false
                 return
             }
             // UITextView positions are UTF-16 offsets; convert to Character offsets so the
-            // reported range lines up with Swift String indexing in the draft body.
-            let utf16Start = textView.offset(from: textView.beginningOfDocument, to: selected.start)
-            let utf16End = textView.offset(from: textView.beginningOfDocument, to: selected.end)
-            let text = textView.text ?? ""
-            let utf16 = text.utf16
-            guard let lowerUTF16 = utf16.index(utf16.startIndex, offsetBy: utf16Start, limitedBy: utf16.endIndex),
-                  let upperUTF16 = utf16.index(utf16.startIndex, offsetBy: utf16End, limitedBy: utf16.endIndex),
-                  let lower = lowerUTF16.samePosition(in: text),
-                  let upper = upperUTF16.samePosition(in: text)
+            // reported range lines up with Swift String indexing in the draft body. Empty
+            // ranges are preserved to represent the caret insertion point.
+            guard let lowerOffset = characterOffset(for: selected.start, in: textView),
+                  let upperOffset = characterOffset(for: selected.end, in: textView)
             else {
                 parent.selectedRange = nil
-                footnoteButton?.isEnabled = false
                 return
             }
-            let lowerOffset = text.distance(from: text.startIndex, to: lower)
-            let upperOffset = text.distance(from: text.startIndex, to: upper)
             parent.selectedRange = lowerOffset ..< upperOffset
-            footnoteButton?.isEnabled = true
+        }
+
+        private func characterOffset(for position: UITextPosition, in textView: UITextView) -> Int? {
+            let utf16Offset = textView.offset(from: textView.beginningOfDocument, to: position)
+            let text = textView.text ?? ""
+            let utf16 = text.utf16
+            guard let utf16Index = utf16.index(utf16.startIndex, offsetBy: utf16Offset, limitedBy: utf16.endIndex),
+                  let stringIndex = utf16Index.samePosition(in: text)
+            else { return nil }
+            return text.distance(from: text.startIndex, to: stringIndex)
         }
     }
 }

@@ -26,8 +26,9 @@ final class TTSService: ObservableObject {
 
     /// Speak the given text. Stops any current utterance first.
     func speak(_ text: String) {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = text.readableAMLText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        configurePlaybackSessionIfNeeded()
         if synthesizer.isSpeaking {
             synthesizer.stopSpeaking(at: .immediate)
         }
@@ -42,6 +43,21 @@ final class TTSService: ObservableObject {
         synthesizer.stopSpeaking(at: .immediate)
         isSpeaking = false
     }
+
+    /// Route speech through the normal playback channel on iOS so read-back is audible
+    /// even when the hardware silent switch would otherwise suppress app audio.
+    private func configurePlaybackSessionIfNeeded() {
+        #if os(iOS)
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
+            try session.setActive(true)
+        } catch {
+            // If the audio session cannot be changed, still attempt speech synthesis;
+            // AVSpeechSynthesizer can often speak with the existing session.
+        }
+        #endif
+    }
 }
 
 /// Bridges AVSpeechSynthesizerDelegate (an NSObject protocol) to a closure.
@@ -54,5 +70,18 @@ private final class SpeechDelegateProxy: NSObject, AVSpeechSynthesizerDelegate {
 
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
         onFinish?()
+    }
+}
+
+private extension String {
+    /// Lightweight cleanup for read-back so inline AML footnote syntax is not spoken
+    /// literally. Server preview remains authoritative for rendering.
+    var readableAMLText: String {
+        replacingOccurrences(
+            of: #"\(<[A-Za-z]+>\s*([^)]*)\)"#,
+            with: "$1",
+            options: .regularExpression
+        )
+        .replacingOccurrences(of: "----", with: "")
     }
 }
