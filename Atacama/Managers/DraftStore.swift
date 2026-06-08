@@ -55,6 +55,14 @@ final class DraftStore: ObservableObject {
         draft = draft.appendingSectionBreak()
     }
 
+    /// Clear the current post body/title/autosave and return to the saved default
+    /// server+channel selection for the next post.
+    func clearPost() {
+        DraftPersistence.clear()
+        draft = Draft()
+        target = ServerStore.shared.defaultTarget
+    }
+
     /// Insert a new colortext footnote at a character offset into the body.
     func insertFootnote(_ tag: ColorTag, text: String, at offset: Int?) {
         draft = draft.insertingFootnote(tag, text: text, at: offset)
