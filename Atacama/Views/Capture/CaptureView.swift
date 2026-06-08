@@ -187,11 +187,17 @@ struct CaptureView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .labelStyle(isCompact ? .iconOnly : .titleAndIcon)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-                .frame(maxWidth: .infinity)
+            Group {
+                // A ternary can't unify the two concrete LabelStyle types, so branch.
+                if isCompact {
+                    Label(title, systemImage: systemImage).labelStyle(.iconOnly)
+                } else {
+                    Label(title, systemImage: systemImage).labelStyle(.titleAndIcon)
+                }
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+            .frame(maxWidth: .infinity)
         }
         .buttonStyle(.bordered)
         .disabled(disabled)
