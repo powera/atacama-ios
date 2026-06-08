@@ -12,11 +12,15 @@ import Foundation
 /// An in-progress post being authored.
 ///
 /// `body` is the live, editable text (the dictation transcript the author edits
-/// normally). Applying a colortext footnote rewrites `body` in place, wrapping the
-/// selected substring in the inline AML form `(<color> …)`. `toAML()` therefore just
-/// returns `body` — the markup is already embedded — but is kept as a named seam so
-/// the submit path doesn't assume the body is raw text.
+/// normally). Sections are separated in the draft with the same four-dash AML
+/// divider submitted to the server. Applying a colortext footnote rewrites `body`
+/// in place, wrapping the selected substring in the inline AML form `(<color> …)`.
+/// `toAML()` is kept as the named seam for any last-mile normalization before the
+/// content is sent.
 struct Draft: Identifiable, Codable, Equatable {
+    /// AML section divider inserted between dictated sections and submitted as-is.
+    static let sectionSeparator = "\n\n----\n\n"
+
     let id: UUID
     var subject: String
     var body: String
@@ -51,10 +55,27 @@ struct Draft: Identifiable, Codable, Equatable {
             && body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    /// The AML markup string to submit as `content`. The colortext footnotes are
-    /// already embedded in `body`, so this is the body verbatim.
+    /// The AML markup string to submit as `content`.
+    ///
+    /// Colortext footnotes and four-dash section dividers are already embedded in
+    /// `body`, so this returns the edited body verbatim.
     func toAML() -> String {
         body
+    }
+
+    /// Insert a four-dash AML section divider after the current section.
+    ///
+    /// Keeps the authoring UI simple: the editor remains one plain text draft, while
+    /// each section boundary is visible and is sent to the server as `----`. No-op if
+    /// the draft is empty or already ends at a section divider.
+    func appendingSectionBreak() -> Draft {
+        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.hasSuffix("----") else { return self }
+
+        var copy = self
+        copy.body = trimmed + Self.sectionSeparator
+        copy.updatedAt = Date()
+        return copy
     }
 
     /// Wrap a range of `body` in an inline AML colortext footnote: `(<color> text)`.
