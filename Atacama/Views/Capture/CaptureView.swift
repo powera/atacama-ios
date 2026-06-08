@@ -35,13 +35,20 @@ struct CaptureView: View {
     /// Compact vertical space (landscape, or the keyboard up on small devices): drop the
     /// instructional hint and shrink the mic so the editor keeps the most room.
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @State private var isKeyboardVisible = false
 
     private var isCompact: Bool { verticalSizeClass == .compact }
+    private var hasPostMetadata: Bool {
+        store.target != nil && !store.draft.subject.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    private var shouldCollapseChrome: Bool { isCompact || isKeyboardVisible || hasPostMetadata }
+    private var showsBottomControlBar: Bool { !isKeyboardVisible }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: isCompact ? 8 : 12) {
+            VStack(spacing: shouldCollapseChrome ? 6 : 12) {
                 authoringHeader
+                    .layoutPriority(0)
 
                 DraftEditorView(
                     text: $store.draft.body,
@@ -50,6 +57,8 @@ struct CaptureView: View {
                     isRecording: stt.isRecording,
                     onToggleDictation: { Task { await toggleDictation() } }
                 )
+                .frame(minHeight: isKeyboardVisible ? 220 : 280, maxHeight: .infinity)
+                .layoutPriority(1)
             }
             .padding(.horizontal)
             .padding(.top, 8)
@@ -72,10 +81,13 @@ struct CaptureView: View {
                     }
                 }
             }
-            // Pin the mic/post controls to the bottom. As a safe-area inset they ride
-            // above the keyboard, so they stay reachable while hand-editing.
+            // Pin the mic/post controls to the bottom for voice-first capture. When the
+            // keyboard is up, hide this bar so the draft remains the flexible area; the
+            // UITextView's inputAccessoryView keeps dictation and Done reachable.
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                controlBar
+                if showsBottomControlBar {
+                    controlBar
+                }
             }
             .sheet(isPresented: $showColorPicker) {
                 ColorTagPickerView { tag in
@@ -113,28 +125,56 @@ struct CaptureView: View {
             .onChange(of: session.signedInServerIDs) {
                 Task { await store.loadChannels() }
             }
+            #if os(iOS)
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                isKeyboardVisible = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+                isKeyboardVisible = false
+            }
+            #endif
         }
     }
 
     private var authoringHeader: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: shouldCollapseChrome ? 6 : 8) {
+            if shouldCollapseChrome {
+                compactPostMetadata
+            } else {
+                PostTargetPicker(
+                    servers: serverStore.signedInServers,
+                    channelsByServer: store.channelsByServer,
+                    selection: $store.target,
+                    onManageServers: { showServers = true }
+                )
+
+                TextField("Title", text: $store.draft.subject)
+                    .font(.headline)
+                    .textFieldStyle(.roundedBorder)
+
+                Text("Tap the mic to dictate. Tap New section between thoughts (sent as ----). Select text to add a colortext footnote.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxHeight: shouldCollapseChrome ? 96 : 180, alignment: .top)
+        .clipped()
+    }
+
+    private var compactPostMetadata: some View {
+        VStack(alignment: .leading, spacing: 6) {
             PostTargetPicker(
                 servers: serverStore.signedInServers,
                 channelsByServer: store.channelsByServer,
                 selection: $store.target,
                 onManageServers: { showServers = true }
             )
+            .controlSize(.small)
 
             TextField("Title", text: $store.draft.subject)
-                .font(.headline)
+                .font(.subheadline.weight(.semibold))
                 .textFieldStyle(.roundedBorder)
-
-            if !isCompact {
-                Text("Tap the mic to dictate. Tap New section between thoughts (sent as ----). Select text to add a colortext footnote.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         }
     }
 

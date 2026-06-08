@@ -53,6 +53,7 @@ struct DraftEditorView: View {
                         .allowsHitTesting(false)
                 }
             }
+            .frame(minHeight: 220, maxHeight: .infinity)
 
             if !liveTranscript.isEmpty {
                 Text(liveTranscript)
@@ -61,6 +62,7 @@ struct DraftEditorView: View {
                     .padding(.horizontal, 4)
             }
         }
+        .frame(minHeight: 240, maxHeight: .infinity)
     }
 }
 
@@ -105,7 +107,8 @@ private struct SelectableTextEditor: UIViewRepresentable {
         }
 
         /// Builds the bar shown above the keyboard while hand-editing: a mic toggle so
-        /// the author can hop back to voice, and a Done button to dismiss.
+        /// the author can hop back to voice while CaptureView hides its bottom bar,
+        /// and a Done button to dismiss.
         func makeAccessoryView() -> UIToolbar {
             let bar = UIToolbar()
             bar.sizeToFit()
