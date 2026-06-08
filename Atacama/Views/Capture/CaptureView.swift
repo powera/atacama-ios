@@ -3,7 +3,7 @@
 //  Atacama
 //
 //  The primary authoring screen: choose a destination, enter a title, dictate
-//  sections, add colortext footnotes to selected text, preview, and submit.
+//  sections, insert colortext footnotes, preview, and submit.
 //
 //  Layout: an inline navigation title keeps the chrome small, a compact header
 //  (destination + title) sits up top, the draft editor fills all remaining space,
@@ -23,12 +23,14 @@ struct CaptureView: View {
     @StateObject private var stt = STTService()
     @StateObject private var tts = TTSService()
 
-    /// Live selection reported by the editor (character offsets into the body).
+    /// Live caret/selection reported by the editor (character offsets into the body).
+    /// Empty ranges are valid and represent a caret location.
     @State private var selectedRange: Range<Int>?
-    /// Selection captured when the Footnote button is tapped. Presenting the picker
-    /// sheet resigns the editor's first responder, which clears `selectedRange`, so we
-    /// snapshot it here and apply the footnote against the snapshot.
-    @State private var footnoteRange: Range<Int>?
+    /// Insertion point captured when the Footnote button is tapped. Presenting the
+    /// picker sheet can resign the editor's first responder, so we snapshot the caret
+    /// location here and insert the new footnote text at that offset.
+    @State private var footnoteInsertionOffset: Int?
+    @State private var footnoteText = ""
     @State private var showColorPicker = false
     @State private var showPreview = false
     @State private var previewHTML: String?
@@ -50,7 +52,7 @@ struct CaptureView: View {
     private var showsBottomControlBar: Bool { !isKeyboardVisible }
     private var editorPlaceholder: String {
         guard !isKeyboardVisible else { return "" }
-        return "Tap the mic to dictate. Tap New section between thoughts (sent as ----). Select text to add a colortext footnote."
+        return "Tap the mic to dictate. Tap New section between thoughts (sent as ----). Put the cursor where a colortext footnote should go."
     }
 
     var body: some View {
@@ -82,6 +84,8 @@ struct CaptureView: View {
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
                         Button("Read draft aloud", systemImage: "speaker.wave.2") {
+                            commitLiveTranscript()
+                            if stt.isRecording { stt.stop() }
                             tts.speak(store.draft.body)
                         }
                         Button("Servers…", systemImage: "server.rack") {
@@ -100,16 +104,22 @@ struct CaptureView: View {
                     controlBar
                 }
             }
-            .sheet(isPresented: $showColorPicker) {
-                ColorTagPickerView { tag in
-                    if let range = footnoteRange {
-                        store.applyFootnote(tag, to: range)
-                    }
-                    footnoteRange = nil
+            .sheet(isPresented: $showColorPicker, onDismiss: {
+                footnoteInsertionOffset = nil
+            }) {
+                ColorTagPickerView(footnoteText: $footnoteText) { tag in
+                    store.insertFootnote(tag, text: footnoteText, at: footnoteInsertionOffset)
+                    footnoteText = ""
+                    footnoteInsertionOffset = nil
                 }
             }
             .sheet(isPresented: $showPreview) {
-                PreviewSheet(html: previewHTML, baseURL: store.targetServer?.apiBase)
+                PreviewSheet(
+                    html: previewHTML,
+                    readAloudText: store.draft.body,
+                    baseURL: store.targetServer?.apiBase,
+                    tts: tts
+                )
             }
             .sheet(isPresented: $showServers) {
                 ServerListView()
@@ -181,7 +191,7 @@ struct CaptureView: View {
                 actionButton(
                     "Footnote",
                     systemImage: "character.bubble",
-                    disabled: selectedRange == nil
+                    disabled: false
                 ) {
                     beginFootnoteSelection()
                 }
@@ -283,6 +293,7 @@ struct CaptureView: View {
 
     private func runPreview() async {
         commitLiveTranscript()
+        if stt.isRecording { stt.stop() }
         previewHTML = await store.preview()
         if previewHTML != nil {
             showPreview = true
@@ -301,11 +312,13 @@ struct CaptureView: View {
         }
     }
 
-    /// Snapshot the current editor selection before the color picker sheet or
-    /// keyboard dismissal can clear the UITextView selection.
+    /// Snapshot the current editor caret before the color picker sheet or keyboard
+    /// dismissal can clear the UITextView selection. If the editor has no active
+    /// cursor (for example while dictating), append after the current draft text.
     private func beginFootnoteSelection() {
-        guard let selectedRange else { return }
-        footnoteRange = selectedRange
+        commitLiveTranscript()
+        if stt.isRecording { stt.stop() }
+        footnoteInsertionOffset = selectedRange?.lowerBound ?? store.draft.body.count
         showColorPicker = true
     }
 
@@ -328,8 +341,10 @@ struct CaptureView: View {
 /// Shows the server-rendered HTML preview in a web view.
 private struct PreviewSheet: View {
     let html: String?
+    let readAloudText: String
     /// API base of the server the preview was rendered by, for asset resolution.
     var baseURL: String?
+    @ObservedObject var tts: TTSService
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -344,9 +359,29 @@ private struct PreviewSheet: View {
             .navigationTitle("Preview")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
+                    Button("Done") {
+                        tts.stop()
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        if tts.isSpeaking {
+                            tts.stop()
+                        } else {
+                            tts.speak(readAloudText)
+                        }
+                    } label: {
+                        Label {
+                            Text(tts.isSpeaking ? "Stop" : "Read preview")
+                        } icon: {
+                            Image(systemName: tts.isSpeaking ? "stop.fill" : "speaker.wave.2")
+                        }
+                    }
+                    .disabled(readAloudText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
+            .onDisappear { tts.stop() }
         }
     }
 }

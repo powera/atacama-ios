@@ -55,8 +55,13 @@ final class DraftStore: ObservableObject {
         draft = draft.appendingSectionBreak()
     }
 
+    /// Insert a new colortext footnote at a character offset into the body.
+    func insertFootnote(_ tag: ColorTag, text: String, at offset: Int?) {
+        draft = draft.insertingFootnote(tag, text: text, at: offset)
+    }
+
     /// Wrap a selected range of the body in a colortext footnote.
-    /// The range is given as character offsets into the body (see `applyingFootnote`).
+    /// Kept for compatibility with older flows; new authoring inserts fresh text.
     func applyFootnote(_ tag: ColorTag, to offsets: Range<Int>) {
         draft = draft.applyingFootnote(tag, to: offsets)
     }

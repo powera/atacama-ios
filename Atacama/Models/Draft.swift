@@ -3,7 +3,7 @@
 //  Atacama
 //
 //  The in-progress post. Plain editable text plus a subject and chosen channel.
-//  Colortext footnotes are applied by wrapping a selected range in an AML color tag.
+//  Colortext footnotes are inserted inline as AML tags.
 //  See docs/draft-model.md and docs/backend-api.md.
 //
 
@@ -13,8 +13,8 @@ import Foundation
 ///
 /// `body` is the live, editable text (the dictation transcript the author edits
 /// normally). Sections are separated in the draft with the same four-dash AML
-/// divider submitted to the server. Applying a colortext footnote rewrites `body`
-/// in place, wrapping the selected substring in the inline AML form `(<color> …)`.
+/// divider submitted to the server. Colortext footnotes are inserted in place as
+/// inline AML snippets `(<color> …)` at the author's chosen caret location.
 /// `toAML()` is kept as the named seam for any last-mile normalization before the
 /// content is sent.
 struct Draft: Identifiable, Codable, Equatable {
@@ -78,16 +78,33 @@ struct Draft: Identifiable, Codable, Equatable {
         return copy
     }
 
+    /// Insert a new inline AML colortext footnote at a caret offset: `(<color> text)`.
+    ///
+    /// The offset is a character offset into `body` rather than a `String.Index` value:
+    /// the cursor originates from a different `String` instance in the editor view, and
+    /// `String.Index` values are not transferable between instances. If the offset is
+    /// out of bounds the footnote is appended, which keeps toolbar actions usable while
+    /// dictating and before the editor has an active cursor.
+    func insertingFootnote(_ tag: ColorTag, text footnoteText: String, at offset: Int?) -> Draft {
+        let trimmed = footnoteText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return self }
+
+        let boundedOffset = min(max(offset ?? body.count, 0), body.count)
+        guard let insertionIndex = body.index(body.startIndex, offsetBy: boundedOffset, limitedBy: body.endIndex) else {
+            return self
+        }
+
+        var copy = self
+        copy.body.insert(contentsOf: "(<\(tag.name)> \(trimmed))", at: insertionIndex)
+        copy.updatedAt = Date()
+        return copy
+    }
+
     /// Wrap a range of `body` in an inline AML colortext footnote: `(<color> text)`.
     ///
-    /// This is the "add a footnote after the fact" operation. The server renders the
-    /// wrapped span as a collapsible footnote. Returns a new Draft; no-op (returns
-    /// self) if the range is empty or out of bounds.
-    ///
-    /// The range is given as character offsets into `body` rather than `String.Index`
-    /// values: the selection originates from a different `String` instance in the
-    /// editor view, and `String.Index` values are not transferable between instances.
-    /// Offsets are stable, so we resolve them against the live `body` here.
+    /// Kept for compatibility with any older call sites; the primary authoring flow now
+    /// inserts newly typed footnote text at the caret instead of converting highlighted
+    /// draft text into a footnote.
     func applyingFootnote(_ tag: ColorTag, to offsets: Range<Int>) -> Draft {
         guard !offsets.isEmpty, offsets.lowerBound >= 0 else { return self }
 
