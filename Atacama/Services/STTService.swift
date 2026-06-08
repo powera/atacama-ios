@@ -30,6 +30,9 @@ final class STTService: ObservableObject {
     private let audioEngine = AVAudioEngine()
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
+    /// Portion of the current recognition session that the UI has already committed
+    /// into the editable draft while the recognizer may keep returning cumulative text.
+    private var committedTranscriptPrefix = ""
 
     /// Request speech + mic authorization. Returns true if both are granted.
     func requestAuthorization() async -> Bool {
@@ -86,15 +89,17 @@ final class STTService: ObservableObject {
 
         isRecording = true
         transcript = ""
+        committedTranscriptPrefix = ""
 
         task = recognizer.recognitionTask(with: request) { [weak self] result, error in
             guard let self else { return }
             Task { @MainActor in
                 if let result {
-                    self.transcript = result.bestTranscription.formattedString
+                    self.transcript = self.uncommittedTranscript(from: result.bestTranscription.formattedString)
                     if result.isFinal {
-                        onUtterance(result.bestTranscription.formattedString)
+                        onUtterance(self.consumeTranscript())
                         self.transcript = ""
+                        self.committedTranscriptPrefix = ""
                         // Restart for the next utterance while still "recording".
                         if self.isRecording {
                             self.restartRecognition(onUtterance: onUtterance)
@@ -109,6 +114,23 @@ final class STTService: ObservableObject {
         }
     }
 
+    /// Returns the current live transcript and clears it so callers can commit it
+    /// before stopping, previewing, or submitting. Speech sometimes only delivers a
+    /// partial result before the author taps Stop/Post; treating that partial as the
+    /// final utterance keeps dictated text from being stranded outside the draft body.
+    func consumeTranscript() -> String {
+        let text = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return "" }
+
+        if committedTranscriptPrefix.isEmpty {
+            committedTranscriptPrefix = text
+        } else {
+            committedTranscriptPrefix += " " + text
+        }
+        transcript = ""
+        return text
+    }
+
     /// Stop dictation and release audio resources.
     func stop() {
         guard isRecording else { return }
@@ -119,6 +141,15 @@ final class STTService: ObservableObject {
     }
 
     // MARK: - Private
+
+    private func uncommittedTranscript(from recognizedText: String) -> String {
+        let prefix = committedTranscriptPrefix.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prefix.isEmpty else { return recognizedText }
+        guard recognizedText.hasPrefix(prefix) else { return recognizedText }
+
+        let suffixStart = recognizedText.index(recognizedText.startIndex, offsetBy: prefix.count)
+        return String(recognizedText[suffixStart...]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     private func restartRecognition(onUtterance: @escaping (String) -> Void) {
         task?.cancel()

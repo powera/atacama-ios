@@ -28,6 +28,8 @@ struct DraftEditorView: View {
     /// Toggle dictation from the keyboard accessory bar. Lets the author switch from
     /// typing back to voice without hunting for the mic beneath the keyboard.
     var onToggleDictation: (() -> Void)?
+    /// Starts the footnote picker from the keyboard accessory before selection is lost.
+    var onAddFootnote: (() -> Void)?
     /// Instructional empty-state text inside the editor.
     var placeholder = "Tap the mic and start talking. Use New section between sections."
 
@@ -39,7 +41,8 @@ struct DraftEditorView: View {
                     text: $text,
                     selectedRange: $selectedRange,
                     isRecording: isRecording,
-                    onToggleDictation: onToggleDictation
+                    onToggleDictation: onToggleDictation,
+                    onAddFootnote: onAddFootnote
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 #else
@@ -75,6 +78,7 @@ private struct SelectableTextEditor: UIViewRepresentable {
     @Binding var selectedRange: Range<Int>?
     var isRecording: Bool = false
     var onToggleDictation: (() -> Void)?
+    var onAddFootnote: (() -> Void)?
 
     func makeUIView(context: Context) -> UITextView {
         let view = UITextView()
@@ -103,13 +107,14 @@ private struct SelectableTextEditor: UIViewRepresentable {
     final class Coordinator: NSObject, UITextViewDelegate {
         private let parent: SelectableTextEditor
         private weak var micButton: UIBarButtonItem?
+        private weak var footnoteButton: UIBarButtonItem?
 
         init(_ parent: SelectableTextEditor) {
             self.parent = parent
         }
 
-        /// Builds the bar shown above the keyboard while hand-editing: a mic toggle so
-        /// the author can hop back to voice while CaptureView hides its bottom bar,
+        /// Builds the bar shown above the keyboard while hand-editing: a mic toggle,
+        /// a footnote action that can use the active selection before it is cleared,
         /// and a Done button to dismiss.
         func makeAccessoryView() -> UIToolbar {
             let bar = UIToolbar()
@@ -122,23 +127,37 @@ private struct SelectableTextEditor: UIViewRepresentable {
             )
             mic.accessibilityLabel = "Start dictation"
             self.micButton = mic
+            let footnote = UIBarButtonItem(
+                image: UIImage(systemName: "character.bubble"),
+                style: .plain,
+                target: self,
+                action: #selector(addFootnote)
+            )
+            footnote.accessibilityLabel = "Add footnote"
+            footnote.isEnabled = false
+            self.footnoteButton = footnote
             let spacer = UIBarButtonItem(systemItem: .flexibleSpace)
             let done = UIBarButtonItem(
                 barButtonSystemItem: .done,
                 target: self,
                 action: #selector(dismissKeyboard)
             )
-            bar.items = [mic, spacer, done]
+            bar.items = [mic, footnote, spacer, done]
             return bar
         }
 
         func updateAccessory(isRecording: Bool) {
             micButton?.image = UIImage(systemName: isRecording ? "stop.fill" : "mic.fill")
             micButton?.accessibilityLabel = isRecording ? "Stop dictation" : "Start dictation"
+            footnoteButton?.isEnabled = parent.selectedRange != nil
         }
 
         @objc private func toggleDictation() {
             parent.onToggleDictation?()
+        }
+
+        @objc private func addFootnote() {
+            parent.onAddFootnote?()
         }
 
         @objc private func dismissKeyboard() {
@@ -154,6 +173,7 @@ private struct SelectableTextEditor: UIViewRepresentable {
         func textViewDidChangeSelection(_ textView: UITextView) {
             guard let selected = textView.selectedTextRange, !selected.isEmpty else {
                 parent.selectedRange = nil
+                footnoteButton?.isEnabled = false
                 return
             }
             // UITextView positions are UTF-16 offsets; convert to Character offsets so the
@@ -168,11 +188,13 @@ private struct SelectableTextEditor: UIViewRepresentable {
                   let upper = upperUTF16.samePosition(in: text)
             else {
                 parent.selectedRange = nil
+                footnoteButton?.isEnabled = false
                 return
             }
             let lowerOffset = text.distance(from: text.startIndex, to: lower)
             let upperOffset = text.distance(from: text.startIndex, to: upper)
             parent.selectedRange = lowerOffset ..< upperOffset
+            footnoteButton?.isEnabled = true
         }
     }
 }
