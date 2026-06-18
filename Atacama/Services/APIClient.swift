@@ -44,6 +44,14 @@ final class APIClient {
 
     private let session: URLSession
 
+    /// Shared decoder. ISO8601 dates so the feed API's `published_at` decodes;
+    /// authoring responses carry no dates, so this is backward-compatible.
+    private static let decoder: JSONDecoder = {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }()
+
     private init() {
         let configuration = URLSessionConfiguration.default
         configuration.timeoutIntervalForRequest = 30
@@ -152,7 +160,7 @@ final class APIClient {
             }
 
             do {
-                return try JSONDecoder().decode(T.self, from: data)
+                return try Self.decoder.decode(T.self, from: data)
             } catch {
                 throw APIError.decodingFailed(error)
             }
@@ -202,5 +210,39 @@ extension APIClient {
     func logout(on server: ServerConfig) async throws {
         struct LogoutResponse: Decodable { let success: Bool }
         let _: LogoutResponse = try await post("/api/logout", on: server, body: [String: String]())
+    }
+}
+
+// MARK: - Reading endpoints
+
+extension APIClient {
+    /// ISO8601 date formatter for the feed's `since`/`until` query params
+    /// (newslettr accepts RFC3339; the date part is enough for day-granularity
+    /// filtering). UTC so a chosen day matches the server's published_at bound.
+    private static let feedDateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        return formatter
+    }()
+
+    /// List published posts on a server, optionally filtered by topic GUID and a
+    /// published-at window. Reading is public, so no sign-in is required.
+    /// GET /api/posts.
+    func posts(
+        on server: ServerConfig,
+        topic: String? = nil,
+        since: Date? = nil,
+        until: Date? = nil
+    ) async throws -> PostListResponse {
+        var params: [String: String] = [:]
+        if let topic, !topic.isEmpty { params["topic"] = topic }
+        if let since { params["since"] = Self.feedDateFormatter.string(from: since) }
+        if let until { params["until"] = Self.feedDateFormatter.string(from: until) }
+        return try await get("/api/posts", on: server, queryParams: params.isEmpty ? nil : params)
+    }
+
+    /// Fetch a single published post with its rendered body. GET /api/posts/{guid}.
+    func post(guid: String, on server: ServerConfig) async throws -> PostDetail {
+        try await get("/api/posts/\(guid)", on: server)
     }
 }

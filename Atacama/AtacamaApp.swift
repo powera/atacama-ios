@@ -12,12 +12,14 @@ import SwiftUI
 struct AtacamaApp: App {
     @StateObject private var session = SessionManager.shared
     @StateObject private var serverStore = ServerStore.shared
+    @StateObject private var reading = ReadingStore.shared
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(session)
                 .environmentObject(serverStore)
+                .environmentObject(reading)
                 .onOpenURL { url in
                     session.handleCallback(url)
                 }
@@ -25,18 +27,26 @@ struct AtacamaApp: App {
     }
 }
 
-/// Switches between sign-in and the authoring UI based on the configured servers
-/// and whether the user is signed in to at least one.
+/// Top-level tabs: a public Reading feed (always available) and the auth-gated
+/// authoring flow. Reading needs no sign-in, so it is the default experience;
+/// writing falls back to sign-in until a server is signed in to.
 struct RootView: View {
     @EnvironmentObject private var session: SessionManager
-    @EnvironmentObject private var serverStore: ServerStore
 
     var body: some View {
-        if session.signedInServerIDs.isEmpty {
-            // No usable server yet — either none configured, or none signed in.
-            SignInView()
-        } else {
-            CaptureView()
+        TabView {
+            ReadingView()
+                .tabItem { Label("Read", systemImage: "book") }
+
+            Group {
+                if session.signedInServerIDs.isEmpty {
+                    // No server signed in yet — offer sign-in for authoring.
+                    SignInView()
+                } else {
+                    CaptureView()
+                }
+            }
+            .tabItem { Label("Write", systemImage: "square.and.pencil") }
         }
     }
 }

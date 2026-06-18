@@ -2,10 +2,10 @@
 
 ## General Agent directions:
 * CLAUDE.md is a symlink to AGENTS.md.
-* The backend for this app lives in the separate **atacama** repo
-  (`../atacama`, served at earlyversion.com). API changes go there, not here —
-  this repo is the iOS client only. This mirrors how the `trakaido` repo is a
-  client whose backend lives inside `atacama`.
+* The backend for this app is **newslettr** (the Go server in `../newslettr`).
+  API changes go there, not here — this repo is the iOS client only. The
+  obsolete **atacama** repo (`../atacama`, earlyversion.com) is posting-only and
+  no longer the reading/reference backend; new work targets newslettr.
 
 ## Project Overview
 
@@ -22,8 +22,15 @@ Two authoring patterns drive the design:
    author selects prior text and wraps it in an Atacama Markup Language (AML)
    colortext tag, which renders as a collapsible footnote on the server.
 
-v1 scope is **authoring/capture only** — composing and submitting posts. Reading
-and browsing existing posts is out of scope for v1.
+The app has two sides, surfaced as tabs (`RootView`):
+- **Write** — voice-first authoring (the original v1 scope): composing and
+  submitting posts. Auth-gated; falls back to sign-in until a server is signed
+  in to.
+- **Read** — a read-only feed of published posts from a newslettr site, filtered
+  by topic and date (the `Views/Reading/` screens + `ReadingStore`). Reading is
+  **public** (newslettr's `GET /api/posts` needs no token), so it works without
+  sign-in. Intelligent digest/summarization is deferred; the list shows a
+  lightweight excerpt and the body is fetched on demand for the detail view.
 
 ## Architecture
 
@@ -40,23 +47,26 @@ and browsing existing posts is out of scope for v1.
 See [docs/](docs/) for architecture notes and the auth flow, and
 [docs/backend-api.md](docs/backend-api.md) for the full backend API spec.
 
-## Backend contract (lives in the `atacama` repo)
+## Backend contract (lives in the `newslettr` repo)
 
-The app talks to a small JSON API on the atacama Flask server. The full spec —
-including the endpoints that still need to be implemented in the `atacama` repo — is
-in [docs/backend-api.md](docs/backend-api.md). Summary:
+The app talks to a small JSON API on the newslettr publisher server. The full
+spec is in the newslettr repo's `API.md` (and mirrored notes in
+[docs/backend-api.md](docs/backend-api.md)). Summary:
 
-Auth is **already built** server-side:
-- **Login**: open `https://earlyversion.com/login?mobile=1&redirect=atacama://auth-callback`
-  in a web auth session. The server completes Google OAuth, mints a `UserToken`, and
-  redirects to `atacama://auth-callback?token=<token>`. Store the token in Keychain.
-- **Authenticated requests**: send `Authorization: Bearer <token>`.
-- **Logout / revoke**: `POST /api/logout` with the Bearer token.
+Authoring endpoints (require `Authorization: Bearer <token>`):
+- `POST /api/login` — `{email, password}` → `{token, expires_at}`.
+- `POST /api/preview` — `{content}` → `{processed_content}`.
+- `POST /api/messages` (alias `/api/posts`) — create a post.
+- `GET /api/channels` (alias `/api/topics`) — channel/topic list for the picker.
+- `POST /api/logout` — revoke the bearer token.
 
-Endpoints used:
-- `POST /api/preview` — `{content}` → `{processed_content}` (already exists).
-- `POST /api/messages` — create a post (**to be implemented** in atacama).
-- `GET /api/channels` — channel list for the picker (**to be implemented**).
+Reading endpoints (**public — no token**):
+- `GET /api/posts` — published-post feed; filters `topic`, `since`, `until`,
+  `limit`. Omits the body (light list).
+- `GET /api/posts/{guid}` — a single post with its rendered `body_html`.
+
+Discovery: `GET /api/atacama-config` (unauthenticated) advertises capabilities,
+including `"reading": true`.
 
 ## Project Structure
 

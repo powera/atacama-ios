@@ -245,8 +245,66 @@ Authorization: Bearer <token>
 
 ---
 
+## `GET /api/posts` ✅ (reading)
+
+The read-only feed for the Read tab. **Public — no token.** Returns published
+posts newest first; the body is omitted to keep the list light.
+
+```http
+GET /api/posts?topic=top_abc123&since=2026-01-01&until=2026-06-18&limit=50
+```
+
+All params optional: `topic` (topic GUID; unknown → 422), `since`/`until`
+(RFC3339 or `YYYY-MM-DD`; malformed → 400), `limit` (default/max 50).
+
+**Response** `200`
+```json
+{
+  "posts": [
+    {
+      "id": "pst_abc123",
+      "title": "Welcome",
+      "excerpt": "Short summary…",
+      "published_at": "2026-06-17T12:00:00Z",
+      "topic": { "id": "top_abc123", "name": "Programming" },
+      "url": "https://newslettr.example.com/feed/post/pst_abc123"
+    }
+  ]
+}
+```
+
+Decoded into `PostSummary` / `PostListResponse` (`Models/Post.swift`).
+`published_at` is ISO8601 (the shared `APIClient` decoder uses `.iso8601`).
+
+---
+
+## `GET /api/posts/{guid}` ✅ (reading)
+
+A single published post with its rendered HTML body. **Public — no token.** A
+draft / soft-deleted / unknown GUID returns `404` (`NOT_FOUND`).
+
+**Response** `200`
+```json
+{
+  "id": "pst_abc123",
+  "title": "Welcome",
+  "body_html": "<p>Rendered AML…</p>",
+  "published_at": "2026-06-17T12:00:00Z",
+  "author": "Newslettr Admin",
+  "topic": { "id": "top_abc123", "name": "Programming" },
+  "references": [ { "id": "pst_def456", "title": "See also" } ],
+  "url": "https://newslettr.example.com/feed/post/pst_abc123"
+}
+```
+
+Decoded into `PostDetail`; `body_html` is shown in the shared `HTMLView`.
+
+---
+
 ## Out of scope (v1)
 
-Reading/browsing existing posts, message chains, feeds, widgets, and any
-edit-history / "hide" tracking are **not** part of v1. The app is authoring-only:
-preview, create, and pick a channel.
+Reading **posts** is supported (above). Still out of scope: reading links,
+calendar entries, newsletters/digests, subscriptions, message chains, and any
+edit-history / "hide" tracking. Intelligent digest/AI summarization of the feed
+is deferred — the list `excerpt` is the server's stored excerpt or a
+first-100-chars fallback.
