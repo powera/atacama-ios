@@ -245,6 +245,62 @@ Authorization: Bearer <token>
 
 ---
 
+## `POST /api/links` ✅ (newslettr) — Share Extension
+
+Save a **shared link** (a URL the user shared into Atacama from another app via
+the iOS Share Extension). Implemented on newslettr (`apiCreateLink`); it files a
+`Link` — URL + title + optional quote/comment, under a topic — for the next
+digest. atacama has no equivalent yet (its share story is post-only), so the
+extension targets newslettr servers (`capabilities.links == true`).
+
+Only `url` is required: a missing `title` falls back to the URL's host, and
+`quote`/`comment` are optional, so a one-tap share succeeds. Links **publish
+immediately** by default; the extension's "Save as draft" toggle sends
+`"draft": true` to capture one unpublished for later review.
+
+**Request**
+```http
+POST /api/links
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "url": "https://example.com/article",   // required, http(s)
+  "title": "Great read",                  // optional; defaults to the URL host
+  "topic": "top_abc123",                  // or "channel"; optional, defaults to the default topic
+  "comment": "Why it's worth sharing",    // optional
+  "quote": "A pulled excerpt",            // optional
+  "draft": false                          // optional; default false (publish now)
+}
+```
+
+**Response** `201`
+```json
+{
+  "id": "lnk_def456",
+  "url": "https://example.com/article",
+  "domain": "example.com",
+  "title": "Great read",
+  "topic": { "id": "top_abc123", "name": "Science" },
+  "is_draft": false
+}
+```
+
+**Errors**
+- `400` — body is not JSON.
+- `401` — missing/invalid token.
+- `422` — `url` missing or not a valid http(s) URL, a field exceeds its limit, or an unknown topic.
+- `500` — save failed.
+
+### Client notes
+- The Share Extension (`AtacamaShareExtension/`) is a separate target. It reuses
+  the app's signed-in server and bearer token via the shared App Group
+  (`group.com.yevaud.atacama`) — the App Group backs both the shared
+  `UserDefaults` suite (server list) and the Keychain access group (token). The
+  user must be signed in to a server in the app before sharing works.
+
+---
+
 ## `GET /api/posts` ✅ (reading)
 
 The read-only feed for the Read tab. **Public — no token.** Returns published

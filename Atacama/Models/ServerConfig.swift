@@ -118,6 +118,9 @@ struct ServerConfigResponse: Decodable {
         let preview: Bool?
         let messages: Bool?
         let channels: Bool?
+        /// Whether the server accepts shared links via POST /api/links (backs the
+        /// Share Extension). Absent on older/atacama backends.
+        let links: Bool?
     }
 
     enum CodingKeys: String, CodingKey {

@@ -24,8 +24,12 @@ final class ServerStore: ObservableObject {
     private let serversKey = "atacama.servers"
     private let defaultTargetKey = "atacama.defaultTarget"
 
-    init(defaults: UserDefaults = .standard) {
+    /// Defaults live in the shared App Group suite so the Share Extension reads the
+    /// same server list and default target the app wrote. A pre-App-Group install
+    /// has its config in `.standard`, so migrate it across once on first launch.
+    init(defaults: UserDefaults = AppGroup.defaults) {
         self.defaults = defaults
+        Self.migrateFromStandardIfNeeded(into: defaults, keys: [serversKey, defaultTargetKey])
         self.servers = (Self.decode([ServerConfig].self, from: defaults, key: serversKey) ?? [])
             .map { $0.usingSecureTransportDefaults() }
         self.defaultTarget = Self.decode(PostTarget.self, from: defaults, key: defaultTargetKey)
@@ -103,6 +107,18 @@ final class ServerStore: ObservableObject {
     private static func decode<T: Decodable>(_ type: T.Type, from defaults: UserDefaults, key: String) -> T? {
         guard let data = defaults.data(forKey: key) else { return nil }
         return try? JSONDecoder().decode(T.self, from: data)
+    }
+
+    /// Copy any legacy config stored in `.standard` (before the App Group existed)
+    /// into the shared suite once, so signing in stays sticky across the upgrade.
+    /// No-op when the shared suite already holds a value or there is nothing to copy.
+    private static func migrateFromStandardIfNeeded(into defaults: UserDefaults, keys: [String]) {
+        guard defaults != .standard else { return }
+        for key in keys where defaults.data(forKey: key) == nil {
+            if let legacy = UserDefaults.standard.data(forKey: key) {
+                defaults.set(legacy, forKey: key)
+            }
+        }
     }
 
     private func host(of urlString: String) -> String {
