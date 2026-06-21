@@ -57,6 +57,7 @@ Authoring endpoints (require `Authorization: Bearer <token>`):
 - `POST /api/login` — `{email, password}` → `{token, expires_at}`.
 - `POST /api/preview` — `{content}` → `{processed_content}`.
 - `POST /api/messages` (alias `/api/posts`) — create a post.
+- `POST /api/links` — save a shared link (backs the Share Extension; newslettr only).
 - `GET /api/channels` (alias `/api/topics`) — channel/topic list for the picker.
 - `POST /api/logout` — revoke the bearer token.
 
@@ -66,7 +67,20 @@ Reading endpoints (**public — no token**):
 - `GET /api/posts/{guid}` — a single post with its rendered `body_html`.
 
 Discovery: `GET /api/atacama-config` (unauthenticated) advertises capabilities,
-including `"reading": true`.
+including `"reading": true` and `"links": true`.
+
+## Share Extension (sharing a link into Atacama)
+
+`AtacamaShareExtension/` is a separate app-extension target that puts Atacama in
+the iOS share sheet for URLs. It extracts the shared URL (and page title),
+presents a small SwiftUI compose sheet (title, comment, topic, publish/draft
+toggle), and `POST`s to `/api/links` on the signed-in server. It reuses the app's
+server list and bearer token through the shared **App Group**
+`group.com.yevaud.atacama` (which backs both the shared `UserDefaults` suite and
+the Keychain access group — see `Storage/AppGroup.swift`). The extension is
+self-contained (its own `ShareStore`) so it doesn't pull the whole app in; keep
+the shared constants in sync with `AppGroup.swift` / `KeychainStore.swift` /
+`ServerConfig.swift`. The user must be signed in to a server in the app first.
 
 ## Project Structure
 

@@ -6,8 +6,23 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		AA10000000000000000000EC /* AtacamaShareExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = AA10000000000000000000E2 /* AtacamaShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		AA10000000000000000000ED /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 853B3E292FD3C3F300EC165F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA10000000000000000000E1;
+			remoteInfo = AtacamaShareExtension;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		853B3E312FD3C3F300EC165F /* Atacama.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Atacama.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA10000000000000000000E2 /* AtacamaShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = AtacamaShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -15,8 +30,17 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
+				Atacama.entitlements,
 			);
 			target = 853B3E302FD3C3F300EC165F /* Atacama */;
+		};
+		AA10000000000000000000E7 /* Exceptions for "AtacamaShareExtension" folder in "AtacamaShareExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+				AtacamaShareExtension.entitlements,
+			);
+			target = AA10000000000000000000E1 /* AtacamaShareExtension */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -29,10 +53,39 @@
 			path = Atacama;
 			sourceTree = "<group>";
 		};
+		AA10000000000000000000E6 /* AtacamaShareExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				AA10000000000000000000E7 /* Exceptions for "AtacamaShareExtension" folder in "AtacamaShareExtension" target */,
+			);
+			path = AtacamaShareExtension;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		AA10000000000000000000EB /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				AA10000000000000000000EC /* AtacamaShareExtension.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		853B3E2E2FD3C3F300EC165F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA10000000000000000000E4 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -54,6 +107,7 @@
 			isa = PBXGroup;
 			children = (
 				853B3E312FD3C3F300EC165F /* Atacama.app */,
+				AA10000000000000000000E2 /* AtacamaShareExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -68,10 +122,12 @@
 				853B3E2D2FD3C3F300EC165F /* Sources */,
 				853B3E2E2FD3C3F300EC165F /* Frameworks */,
 				853B3E2F2FD3C3F300EC165F /* Resources */,
+				AA10000000000000000000EB /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				AA10000000000000000000EE /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				853B3E332FD3C3F300EC165F /* Atacama */,
@@ -82,6 +138,28 @@
 			productName = Atacama;
 			productReference = 853B3E312FD3C3F300EC165F /* Atacama.app */;
 			productType = "com.apple.product-type.application";
+		};
+		AA10000000000000000000E1 /* AtacamaShareExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA10000000000000000000E8 /* Build configuration list for PBXNativeTarget "AtacamaShareExtension" */;
+			buildPhases = (
+				AA10000000000000000000E3 /* Sources */,
+				AA10000000000000000000E4 /* Frameworks */,
+				AA10000000000000000000E5 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				AA10000000000000000000E6 /* AtacamaShareExtension */,
+			);
+			name = AtacamaShareExtension;
+			packageProductDependencies = (
+			);
+			productName = AtacamaShareExtension;
+			productReference = AA10000000000000000000E2 /* AtacamaShareExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -94,6 +172,9 @@
 				LastUpgradeCheck = 2610;
 				TargetAttributes = {
 					853B3E302FD3C3F300EC165F = {
+						CreatedOnToolsVersion = 26.1.1;
+					};
+					AA10000000000000000000E1 = {
 						CreatedOnToolsVersion = 26.1.1;
 					};
 				};
@@ -113,12 +194,20 @@
 			projectRoot = "";
 			targets = (
 				853B3E302FD3C3F300EC165F /* Atacama */,
+				AA10000000000000000000E1 /* AtacamaShareExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		853B3E2F2FD3C3F300EC165F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA10000000000000000000E5 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -135,7 +224,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AA10000000000000000000E3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		AA10000000000000000000EE /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA10000000000000000000E1 /* AtacamaShareExtension */;
+			targetProxy = AA10000000000000000000ED /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		853B3E3A2FD3C3F400EC165F /* Debug */ = {
@@ -268,6 +372,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = PMA7323MJL;
 				ENABLE_PREVIEWS = YES;
+				CODE_SIGN_ENTITLEMENTS = Atacama/Atacama.entitlements;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Atacama/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -302,6 +407,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = PMA7323MJL;
 				ENABLE_PREVIEWS = YES;
+				CODE_SIGN_ENTITLEMENTS = Atacama/Atacama.entitlements;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Atacama/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -318,6 +424,65 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		AA10000000000000000000E9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = AtacamaShareExtension/AtacamaShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = PMA7323MJL;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = AtacamaShareExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yevaud.atacama.ShareExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		AA10000000000000000000EA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = AtacamaShareExtension/AtacamaShareExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = PMA7323MJL;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = AtacamaShareExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yevaud.atacama.ShareExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -344,6 +509,15 @@
 			buildConfigurations = (
 				853B3E3D2FD3C3F400EC165F /* Debug */,
 				853B3E3E2FD3C3F400EC165F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA10000000000000000000E8 /* Build configuration list for PBXNativeTarget "AtacamaShareExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA10000000000000000000E9 /* Debug */,
+				AA10000000000000000000EA /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -11,9 +11,17 @@ import Foundation
 import Security
 
 /// Stores per-server bearer auth tokens in the Keychain as generic passwords.
+///
+/// Tokens live in the shared App Group's keychain access group so the Share
+/// Extension can read the same token the app stored (an app group identifier is
+/// a valid keychain access group, and unlike a `keychain-access-groups` entry it
+/// carries no team-ID prefix). Every query therefore pins `kSecAttrAccessGroup`.
 enum KeychainStore {
     /// Service identifier for our Keychain items.
     private static let service = "com.atacama.ios.auth"
+
+    /// Keychain access group shared with the Share Extension (the App Group id).
+    private static let accessGroup = AppGroup.identifier
 
     /// Account key for a server's token: one entry per server id.
     private static func account(for serverID: UUID) -> String {
@@ -31,6 +39,7 @@ enum KeychainStore {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: key,
+            kSecAttrAccessGroup as String: accessGroup,
         ]
         SecItemDelete(deleteQuery as CFDictionary)
 
@@ -38,6 +47,7 @@ enum KeychainStore {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: key,
+            kSecAttrAccessGroup as String: accessGroup,
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
         ]
@@ -50,6 +60,7 @@ enum KeychainStore {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account(for: serverID),
+            kSecAttrAccessGroup as String: accessGroup,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
         ]
@@ -68,6 +79,7 @@ enum KeychainStore {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account(for: serverID),
+            kSecAttrAccessGroup as String: accessGroup,
         ]
         let status = SecItemDelete(query as CFDictionary)
         return status == errSecSuccess || status == errSecItemNotFound
