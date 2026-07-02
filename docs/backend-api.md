@@ -43,7 +43,7 @@ GET /api/atacama-config
   "name": "Alex Power's blog",
   "api_base": "https://earlyversion.com",
   "auth": { "type": "oauth", "login_path": "/login" },
-  "capabilities": { "preview": true, "messages": true, "channels": true }
+  "capabilities": { "preview": true, "messages": true, "channels": true, "links": true }
 }
 ```
 
@@ -245,18 +245,23 @@ Authorization: Bearer <token>
 
 ---
 
-## `POST /api/links` ✅ (newslettr) — Share Extension
+## `POST /api/links` ✅ (both backends) — Share Extension
 
 Save a **shared link** (a URL the user shared into Atacama from another app via
-the iOS Share Extension). Implemented on newslettr (`apiCreateLink`); it files a
-`Link` — URL + title + optional quote/comment, under a topic — for the next
-digest. atacama has no equivalent yet (its share story is post-only), so the
-extension targets newslettr servers (`capabilities.links == true`).
+the iOS Share Extension). Implemented on both backends
+(`capabilities.links == true`). newslettr (`apiCreateLink`) files a `Link` —
+URL + title + optional quote/comment, under a topic — for the next digest.
+atacama (`create_link_api` in `src/blog/blueprints/api.py`) has no separate
+link model, so it saves the link as a regular message: the comment leads, the
+quote renders as a `<quote>` block, and the URL sits on its own line
+(auto-linked and archived).
 
 Only `url` is required: a missing `title` falls back to the URL's host, and
 `quote`/`comment` are optional, so a one-tap share succeeds. Links **publish
 immediately** by default; the extension's "Save as draft" toggle sends
-`"draft": true` to capture one unpublished for later review.
+`"draft": true` to capture one unpublished for later review — on newslettr
+only. atacama has no unpublished drafts and rejects `"draft": true` with a
+`422` telling the user to turn the toggle off.
 
 **Request**
 ```http
@@ -289,7 +294,7 @@ Content-Type: application/json
 **Errors**
 - `400` — body is not JSON.
 - `401` — missing/invalid token.
-- `422` — `url` missing or not a valid http(s) URL, a field exceeds its limit, or an unknown topic.
+- `422` — `url` missing or not a valid http(s) URL, a field exceeds its limit, an unknown topic, or (atacama only) `"draft": true`.
 - `500` — save failed.
 
 ### Client notes

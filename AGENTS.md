@@ -57,7 +57,7 @@ Authoring endpoints (require `Authorization: Bearer <token>`):
 - `POST /api/login` — `{email, password}` → `{token, expires_at}`.
 - `POST /api/preview` — `{content}` → `{processed_content}`.
 - `POST /api/messages` (alias `/api/posts`) — create a post.
-- `POST /api/links` — save a shared link (backs the Share Extension; newslettr only).
+- `POST /api/links` — save a shared link (backs the Share Extension; both backends).
 - `GET /api/channels` (alias `/api/topics`) — channel/topic list for the picker.
 - `POST /api/logout` — revoke the bearer token.
 
