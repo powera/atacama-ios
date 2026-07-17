@@ -6,5 +6,9 @@
 	<array>
 		<string>group.com.yevaud.atacama</string>
 	</array>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)group.com.yevaud.atacama</string>
+	</array>
 </dict>
 </plist>
