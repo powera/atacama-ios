@@ -54,6 +54,13 @@ struct ServerConfig: Identifiable, Codable, Hashable {
     var authType: String
     /// Login path opened for the OAuth flow (from the config endpoint).
     var loginPath: String
+    /// Whether the server accepts photo uploads (POST /api/images) and serves the
+    /// image feed. Nil for servers added before this field existed — treated as
+    /// "unknown, allow" so an existing newslettr server isn't hidden until re-added.
+    var supportsImages: Bool?
+    /// Whether the server serves the public quotes feed (GET /api/quotes). Nil is
+    /// treated as "unknown, allow", like supportsImages.
+    var supportsQuotes: Bool?
 
     init(
         id: UUID = UUID(),
@@ -61,7 +68,9 @@ struct ServerConfig: Identifiable, Codable, Hashable {
         name: String,
         apiBase: String,
         authType: String,
-        loginPath: String
+        loginPath: String,
+        supportsImages: Bool? = nil,
+        supportsQuotes: Bool? = nil
     ) {
         self.id = id
         self.baseURL = baseURL
@@ -69,11 +78,19 @@ struct ServerConfig: Identifiable, Codable, Hashable {
         self.apiBase = apiBase
         self.authType = authType
         self.loginPath = loginPath
+        self.supportsImages = supportsImages
+        self.supportsQuotes = supportsQuotes
     }
 
     /// Whether the app can currently sign in to this server. Only OAuth is wired
     /// up for now; password servers are shown but not yet signable.
     var supportsSignIn: Bool { authType == "oauth" }
+
+    /// Whether to offer photo upload for this server. Absent capability info
+    /// (older stored servers) is treated as allowed; only an explicit false hides it.
+    var offersImages: Bool { supportsImages != false }
+    /// Whether to offer the quotes feed for this server (same nil-as-allowed rule).
+    var offersQuotes: Bool { supportsQuotes != false }
 
     /// Copy with ATS-safe base URLs. This also fixes servers saved before the
     /// client enforced HTTPS for non-local backends.
@@ -84,7 +101,9 @@ struct ServerConfig: Identifiable, Codable, Hashable {
             name: name,
             apiBase: TransportSecurity.normalizedBaseURL(apiBase),
             authType: authType,
-            loginPath: loginPath
+            loginPath: loginPath,
+            supportsImages: supportsImages,
+            supportsQuotes: supportsQuotes
         )
     }
 }
@@ -121,6 +140,10 @@ struct ServerConfigResponse: Decodable {
         /// Whether the server accepts shared links via POST /api/links (backs the
         /// Share Extension). Absent on older/atacama backends.
         let links: Bool?
+        /// Whether the server accepts photo uploads and serves the image feed.
+        let images: Bool?
+        /// Whether the server serves the public quotes feed.
+        let quotes: Bool?
     }
 
     enum CodingKeys: String, CodingKey {

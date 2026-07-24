@@ -43,7 +43,7 @@ GET /api/atacama-config
   "name": "Alex Power's blog",
   "api_base": "https://earlyversion.com",
   "auth": { "type": "oauth", "login_path": "/login" },
-  "capabilities": { "preview": true, "messages": true, "channels": true, "links": true }
+  "capabilities": { "preview": true, "messages": true, "channels": true, "links": true, "images": true, "quotes": true }
 }
 ```
 
@@ -52,7 +52,10 @@ GET /api/atacama-config
 - `auth.type` — `"oauth"` (atacama) or `"password"` (newslettr). The app branches
   on this; only `oauth` is wired up today.
 - `auth.login_path` — path the OAuth flow opens (atacama: `/login`).
-- `capabilities` — informational feature flags.
+- `capabilities` — feature flags. `images`/`quotes` gate the Photo tab and the
+  Read tab's Photos/Quotes views; absent flags (older/atacama backends) are
+  treated as "allowed" for already-added servers but recorded on `ServerConfig`
+  when a server is added.
 
 Implemented in atacama at `src/blog/blueprints/api.py` (`client_config_api`) and in
 newslettr at `internal/app/publisher/routes.go` (`apiConfig`).
@@ -362,10 +365,132 @@ Decoded into `PostDetail`; `body_html` is shown in the shared `HTMLView`.
 
 ---
 
+## `POST /api/images` ✅ — photo upload (the Photo tab)
+
+Upload a photo from the phone. **Requires a bearer token.** Unlike the JSON
+authoring endpoints, the body is `multipart/form-data` (it carries binary): the
+bytes go in an `image` part, the rest are ordinary form fields. Advertised by
+`capabilities.images == true`.
+
+```http
+POST /api/images
+Authorization: Bearer <token>
+Content-Type: multipart/form-data; boundary=…
+
+image=<binary>            // required, an image/* file, ≤ 30 MiB
+topic_guid=top_abc123     // or "topic"/"channel"; optional, defaults to default topic
+title=Sunset              // optional
+caption=Over the bay      // optional
+location=San Francisco    // optional
+date=2026-07-01           // optional YYYY-MM-DD; overrides EXIF capture date
+action=publish            // optional; "publish" or "draft" (default "draft")
+```
+
+**Response** `201` — the created image (same shape as `GET /api/images/{guid}`).
+Errors: `401` (no token), `422` (no/invalid image, over 30 MiB, bad field, or
+unknown topic), `500`.
+
+Client notes: the app transcodes picked/captured photos to JPEG and downscales
+them (`ImageEncoding`) before upload, since library photos are often HEIC (which
+the backend's EXIF reader doesn't decode). Decoded into `AtacamaImage`. Uploads
+default to **draft**; the Photo tab's "Publish now" toggle sends `action=publish`.
+
+---
+
+## `GET /api/images` ✅ (reading) — photo feed
+
+The public photo feed. **Public — no token.** Published, non-deleted images only.
+Same `topic` / `since` / `until` / `limit` filters as `GET /api/posts`.
+
+**Response** `200`
+```json
+{
+  "images": [
+    {
+      "id": "img_def456",
+      "url": "https://newslettr.example.com/publisher/uploads/img_def456.jpg",
+      "title": "Sunset",
+      "caption": "Over the bay",
+      "location": "San Francisco",
+      "width": 4032,
+      "height": 3024,
+      "camera_make": "Apple",
+      "camera_model": "iPhone 15 Pro",
+      "captured_at": "2026-07-01T18:12:00Z",
+      "topic": { "id": "top_abc123", "name": "Personal" },
+      "author": "Newslettr Admin",
+      "is_draft": false
+    }
+  ]
+}
+```
+
+`url` is absolutized so the app can load it directly via `AsyncImage`. Decoded
+into `[AtacamaImage]`; shown as a grid in the Read tab's **Photos** view.
+
+## `GET /api/images/{guid}` ✅ (reading)
+
+A single published image's metadata (the same object shape as a feed entry). A
+draft / soft-deleted / unknown GUID returns `404` (`NOT_FOUND`).
+
+---
+
+## `GET /api/links` ✅ (reading) — links feed
+
+The public shared-link feed. **Public — no token.** Published, non-deleted links
+only; each carries a URL plus an optional quote and comment. Decoded into
+`[LinkItem]`; shown as a tappable list in the Read tab's **Links** view.
+
+**Response** `200`
+```json
+{
+  "links": [
+    {
+      "id": "lnk_norvig",
+      "url": "https://norvig.com/21-days.html",
+      "domain": "norvig.com",
+      "title": "Teach Yourself Programming in Ten Years",
+      "quote": "",
+      "comment": "A durable rebuttal to weekend mastery myths.",
+      "published_at": "2026-07-22T12:00:00Z",
+      "topic": { "id": "top_programming", "name": "Programming" }
+    }
+  ]
+}
+```
+
+---
+
+## `GET /api/quotes` ✅ (reading) — quotes feed
+
+The public tracked-quotation feed. **Public — no token.** Quotes have no draft
+concept. Advertised by `capabilities.quotes == true`. Decoded into `[Quote]`;
+shown in the Read tab's **Quotes** view.
+
+**Response** `200`
+```json
+{
+  "quotes": [
+    {
+      "id": "quo_abc123",
+      "text": "The medium is the message.",
+      "quote_type": "reference",
+      "original_author": "Marshall McLuhan",
+      "source": "Understanding Media",
+      "quote_date": "1964",
+      "commentary": ""
+    }
+  ]
+}
+```
+
+---
+
 ## Out of scope (v1)
 
-Reading **posts** is supported (above). Still out of scope: reading links,
-calendar entries, newsletters/digests, subscriptions, message chains, and any
-edit-history / "hide" tracking. Intelligent digest/AI summarization of the feed
-is deferred — the list `excerpt` is the server's stored excerpt or a
-first-100-chars fallback.
+Reading **posts**, **images**, **links**, and **quotes** is supported (above),
+and photos can be uploaded (`POST /api/images`). Still out of scope: photo
+**collections/galleries**, reading calendar entries, newsletters/digests,
+subscriptions, message chains, and any edit-history / "hide" tracking.
+Intelligent digest/AI summarization of the feed is deferred — the list `excerpt`
+is the server's stored excerpt or a first-100-chars fallback.

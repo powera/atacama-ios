@@ -16,30 +16,36 @@ struct ReadingView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if reading.readingServer == nil {
-                    ContentUnavailableView(
-                        "No server",
-                        systemImage: "tray",
-                        description: Text("Add a newslettr server in Settings to start reading.")
-                    )
-                } else if reading.posts.isEmpty, !reading.isLoading {
-                    ContentUnavailableView(
-                        "No posts",
-                        systemImage: "doc.text",
-                        description: Text(reading.lastError ?? "Nothing matches the current filters.")
-                    )
-                } else {
-                    feedList
+            VStack(spacing: 0) {
+                kindPicker
+                Group {
+                    if reading.readingServer == nil {
+                        ContentUnavailableView(
+                            "No server",
+                            systemImage: "tray",
+                            description: Text("Add a newslettr server in Settings to start reading.")
+                        )
+                    } else if reading.isEmpty, !reading.isLoading {
+                        ContentUnavailableView(
+                            "Nothing here",
+                            systemImage: reading.kind.systemImage,
+                            description: Text(reading.lastError ?? "Nothing matches the current filters.")
+                        )
+                    } else {
+                        feedContent
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .navigationTitle("Read")
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        showingFilters = true
-                    } label: {
-                        Label("Filters", systemImage: filtersActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                if reading.kind.isFilterable {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            showingFilters = true
+                        } label: {
+                            Label("Filters", systemImage: filtersActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                        }
                     }
                 }
             }
@@ -48,29 +54,66 @@ struct ReadingView: View {
                     .environmentObject(reading)
             }
             .overlay {
-                if reading.isLoading, reading.posts.isEmpty {
+                if reading.isLoading, reading.isEmpty {
                     ProgressView()
                 }
             }
             .task { await reading.load() }
+            .onChange(of: reading.kind) { Task { await reading.load() } }
         }
+    }
+
+    /// Segmented control choosing which content type to read (Posts / Photos /
+    /// Links / Quotes), limited to what the reading server advertises.
+    private var kindPicker: some View {
+        Picker("Content", selection: $reading.kind) {
+            ForEach(reading.availableKinds) { kind in
+                Text(kind.title).tag(kind)
+            }
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal)
+        .padding(.vertical, 8)
     }
 
     private var filtersActive: Bool {
         reading.selectedTopic != nil || reading.since != nil || reading.until != nil
     }
 
-    private var feedList: some View {
-        List(reading.posts) { post in
-            NavigationLink {
-                PostDetailView(postID: post.id, fallbackTitle: post.title)
-                    .environmentObject(reading)
-            } label: {
-                PostRowView(post: post)
+    @ViewBuilder
+    private var feedContent: some View {
+        switch reading.kind {
+        case .posts:
+            List(reading.posts) { post in
+                NavigationLink {
+                    PostDetailView(postID: post.id, fallbackTitle: post.title)
+                        .environmentObject(reading)
+                } label: {
+                    PostRowView(post: post)
+                }
             }
+            .listStyle(.plain)
+            .refreshable { await reading.load() }
+        case .photos:
+            ImageGridView(images: reading.images)
+                .refreshable { await reading.load() }
+        case .links:
+            List(reading.links) { link in
+                if let url = URL(string: link.url) {
+                    Link(destination: url) { LinkRowView(link: link) }
+                } else {
+                    LinkRowView(link: link)
+                }
+            }
+            .listStyle(.plain)
+            .refreshable { await reading.load() }
+        case .quotes:
+            List(reading.quotes) { quote in
+                QuoteRowView(quote: quote)
+            }
+            .listStyle(.plain)
+            .refreshable { await reading.load() }
         }
-        .listStyle(.plain)
-        .refreshable { await reading.load() }
     }
 }
 

@@ -24,6 +24,10 @@
 	<string>Atacama uses the microphone to dictate your posts.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Atacama transcribes your speech into text as you author posts.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Atacama uploads photos you choose to your newslettr site.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Atacama uses the camera to capture photos to upload to your newslettr site.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

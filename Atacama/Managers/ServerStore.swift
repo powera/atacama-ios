@@ -61,7 +61,9 @@ final class ServerStore: ObservableObject {
             name: response.name.isEmpty ? host(of: response.apiBase) : response.name,
             apiBase: TransportSecurity.normalizedBaseURL(response.apiBase),
             authType: response.auth.type,
-            loginPath: response.auth.loginPath
+            loginPath: response.auth.loginPath,
+            supportsImages: response.capabilities?.images,
+            supportsQuotes: response.capabilities?.quotes
         )
         servers.append(server)
         persist()

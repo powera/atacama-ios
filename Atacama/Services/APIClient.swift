@@ -245,4 +245,116 @@ extension APIClient {
     func post(guid: String, on server: ServerConfig) async throws -> PostDetail {
         try await get("/api/posts/\(guid)", on: server)
     }
+
+    /// List published images on a server, optionally filtered by topic and a
+    /// published-at window. Public — no sign-in. GET /api/images.
+    func images(
+        on server: ServerConfig,
+        topic: String? = nil,
+        since: Date? = nil,
+        until: Date? = nil
+    ) async throws -> ImageListResponse {
+        var params: [String: String] = [:]
+        if let topic, !topic.isEmpty { params["topic"] = topic }
+        if let since { params["since"] = Self.feedDateFormatter.string(from: since) }
+        if let until { params["until"] = Self.feedDateFormatter.string(from: until) }
+        return try await get("/api/images", on: server, queryParams: params.isEmpty ? nil : params)
+    }
+
+    /// Fetch a single published image's metadata. GET /api/images/{guid}.
+    func image(guid: String, on server: ServerConfig) async throws -> AtacamaImage {
+        try await get("/api/images/\(guid)", on: server)
+    }
+
+    /// List published shared links on a server. Public — no sign-in. GET /api/links.
+    func links(on server: ServerConfig) async throws -> LinkListResponse {
+        try await get("/api/links", on: server)
+    }
+
+    /// List published quotes on a server. Public — no sign-in. GET /api/quotes.
+    func quotes(on server: ServerConfig) async throws -> QuoteListResponse {
+        try await get("/api/quotes", on: server)
+    }
+}
+
+// MARK: - Multipart upload (photos)
+
+extension APIClient {
+    /// Upload a photo to a server as multipart/form-data. POST /api/images.
+    /// The bytes go in the `image` part; the rest are ordinary form fields. Returns
+    /// the created image. Requires a bearer token (authoring).
+    func uploadImage(
+        _ data: Data,
+        filename: String,
+        contentType: String = "image/jpeg",
+        topicGUID: String?,
+        title: String,
+        caption: String,
+        location: String,
+        publish: Bool,
+        on server: ServerConfig
+    ) async throws -> AtacamaImage {
+        var fields: [String: String] = [
+            "title": title,
+            "caption": caption,
+            "location": location,
+            "action": publish ? "publish" : "draft",
+        ]
+        if let topicGUID, !topicGUID.isEmpty { fields["topic_guid"] = topicGUID }
+        return try await postMultipart(
+            "/api/images",
+            on: server,
+            fields: fields,
+            fileField: "image",
+            filename: filename,
+            fileContentType: contentType,
+            fileData: data
+        )
+    }
+
+    /// POST a multipart/form-data body (text fields plus one file part) to a server
+    /// and decode the JSON response. Swift has no built-in multipart encoder, so the
+    /// body is assembled by hand with a random boundary. Attaches the server's
+    /// bearer token like the JSON `post` helper.
+    private func postMultipart<T: Decodable>(
+        _ endpoint: String,
+        on server: ServerConfig,
+        fields: [String: String],
+        fileField: String,
+        filename: String,
+        fileContentType: String,
+        fileData: Data
+    ) async throws -> T {
+        guard let url = URL(string: fullURL(for: endpoint, base: server.apiBase)) else {
+            throw APIError.invalidURL
+        }
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var body = Data()
+        func appendString(_ string: String) {
+            if let d = string.data(using: .utf8) { body.append(d) }
+        }
+        for (key, value) in fields {
+            appendString("--\(boundary)\r\n")
+            appendString("Content-Disposition: form-data; name=\"\(key)\"\r\n\r\n")
+            appendString("\(value)\r\n")
+        }
+        appendString("--\(boundary)\r\n")
+        appendString("Content-Disposition: form-data; name=\"\(fileField)\"; filename=\"\(filename)\"\r\n")
+        appendString("Content-Type: \(fileContentType)\r\n\r\n")
+        body.append(fileData)
+        appendString("\r\n")
+        appendString("--\(boundary)--\r\n")
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let token = KeychainStore.loadToken(for: server.id) {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        request.httpBody = body
+
+        NSLog("🌐 POST (multipart) \(url.absoluteString)")
+        return try await send(request)
+    }
 }
