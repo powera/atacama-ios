@@ -22,15 +22,18 @@ Two authoring patterns drive the design:
    author selects prior text and wraps it in an Atacama Markup Language (AML)
    colortext tag, which renders as a collapsible footnote on the server.
 
-The app has two sides, surfaced as tabs (`RootView`):
+The app has three tabs (`RootView`):
 - **Write** — voice-first authoring (the original v1 scope): composing and
   submitting posts. Auth-gated; falls back to sign-in until a server is signed
   in to.
-- **Read** — a read-only feed of published posts from a newslettr site, filtered
-  by topic and date (the `Views/Reading/` screens + `ReadingStore`). Reading is
-  **public** (newslettr's `GET /api/posts` needs no token), so it works without
-  sign-in. Intelligent digest/summarization is deferred; the list shows a
-  lightweight excerpt and the body is fetched on demand for the detail view.
+- **Photo** — pick or capture a photo and upload it to newslettr
+  (`PhotoUploadView` + `PhotoUploadStore` → `POST /api/images`). Auth-gated like
+  Write; shown per the server's `images` capability.
+- **Read** — a read-only feed from a newslettr site (the `Views/Reading/` screens
+  + `ReadingStore`), with a Posts / Photos / Links / Quotes selector. Reading is
+  **public** (the `GET /api/{posts,images,links,quotes}` feeds need no token), so
+  it works without sign-in. Posts and photos filter by topic and date;
+  intelligent digest/summarization is deferred.
 
 ## Architecture
 
@@ -88,19 +91,25 @@ the shared constants in sync with `AppGroup.swift` / `KeychainStore.swift` /
 atacama-ios/
 ├── AGENTS.md / CLAUDE.md (symlink)
 ├── docs/                          # backend-api.md, architecture, auth flow
-└── Atacama/                       # Atacama.xcodeproj (not yet created)
-    ├── AtacamaApp.swift           # @main; registers atacama:// URL scheme (.onOpenURL)
+└── Atacama/                       # Atacama.xcodeproj (synchronized file-system group:
+    │                              #   new .swift files under Atacama/ are auto-compiled)
+    ├── AtacamaApp.swift           # @main; RootView tabs; registers atacama:// (.onOpenURL)
     ├── Models/
     │   ├── Draft.swift            # draft text + applied colortext footnotes
     │   ├── ColorTag.swift         # mirror of AML COLORS (name, sigil, cssClass, description)
     │   ├── Channel.swift          # Decodable {name, displayName, group, requiresAuth}
-    │   └── MessageDraftPayload.swift  # Encodable {subject, content, channel, parent_id}
+    │   ├── MessageDraftPayload.swift  # Encodable {subject, content, channel, parent_id}
+    │   ├── Post.swift             # read-only post feed models (PostSummary/PostDetail/TopicRef)
+    │   ├── AtacamaImage.swift     # image model (upload response + feed)
+    │   ├── LinkItem.swift         # links feed model
+    │   └── Quote.swift            # quotes feed model
     ├── Views/
-    │   ├── Capture/               # CaptureView (STT screen), DraftEditorView
-    │   ├── Components/            # ColorTagPickerView, MicButton, ChannelPicker
+    │   ├── Capture/               # CaptureView (STT screen), DraftEditorView, PhotoUploadView
+    │   ├── Reading/               # ReadingView + Post/Image/Link/Quote row & detail views
+    │   ├── Components/            # ColorTagPickerView, MicButton, PostTargetPicker, HTMLView
     │   └── Auth/                  # SignInView
-    ├── Services/                  # APIClient, AuthenticationService, STTService, TTSService
-    ├── Managers/                  # SessionManager, DraftStore (singletons)
+    ├── Services/                  # APIClient, AuthenticationService, STT/TTSService, ImageEncoding
+    ├── Managers/                  # SessionManager, DraftStore, ReadingStore, PhotoUploadStore
     └── Storage/                   # KeychainStore, DraftPersistence
 ```
 

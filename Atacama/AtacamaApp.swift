@@ -38,15 +38,21 @@ struct RootView: View {
             ReadingView()
                 .tabItem { Label("Read", systemImage: "book") }
 
-            Group {
-                if session.signedInServerIDs.isEmpty {
-                    // No server signed in yet — offer sign-in for authoring.
-                    SignInView()
-                } else {
-                    CaptureView()
-                }
-            }
-            .tabItem { Label("Write", systemImage: "square.and.pencil") }
+            authGated { CaptureView() }
+                .tabItem { Label("Write", systemImage: "square.and.pencil") }
+
+            authGated { PhotoUploadView() }
+                .tabItem { Label("Photo", systemImage: "photo") }
+        }
+    }
+
+    /// Authoring tabs need a signed-in server; until then they fall back to sign-in.
+    @ViewBuilder
+    private func authGated(_ content: () -> some View) -> some View {
+        if session.signedInServerIDs.isEmpty {
+            SignInView()
+        } else {
+            content()
         }
     }
 }
