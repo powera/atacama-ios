@@ -15,16 +15,28 @@ struct ServerListView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var showAddServer = false
+    @State private var isSeeding = false
 
     var body: some View {
         NavigationStack {
             List {
                 if serverStore.servers.isEmpty {
-                    ContentUnavailableView(
-                        "No servers",
-                        systemImage: "server.rack",
-                        description: Text("Add a server to start authoring.")
-                    )
+                    if isSeeding {
+                        // First launch is still fetching the default server's
+                        // config; showing "No servers" here would flash and then
+                        // be replaced a moment later.
+                        HStack {
+                            ProgressView()
+                            Text("Setting up…")
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        ContentUnavailableView(
+                            "No servers",
+                            systemImage: "server.rack",
+                            description: Text("Add a server to start authoring.")
+                        )
+                    }
                 } else {
                     ForEach(serverStore.servers) { server in
                         ServerRow(server: server)
@@ -43,6 +55,13 @@ struct ServerListView: View {
             }
             .sheet(isPresented: $showAddServer) {
                 AddServerView()
+            }
+            .task {
+                // Retry for the user who was offline at launch and opened this
+                // screen to sort it out. No-op once the seed has succeeded.
+                isSeeding = true
+                await serverStore.seedDefaultServerIfNeeded()
+                isSeeding = false
             }
             .alert("Sign-in error", isPresented: .constant(session.lastError != nil)) {
                 Button("OK") { session.lastError = nil }

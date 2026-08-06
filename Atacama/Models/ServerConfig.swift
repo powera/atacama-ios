@@ -2,10 +2,11 @@
 //  ServerConfig.swift
 //  Atacama
 //
-//  A backend the app can author against. The app supports one or more servers
-//  (e.g. atacama at earlyversion.com and the newslettr Go backend); each is added
-//  by base URL and described by its GET /api/atacama-config endpoint. The user
-//  picks a server+channel target per post. See docs/backend-api.md.
+//  A backend the app can author against. The app supports one or more newslettr
+//  servers (newslettr.com is seeded as the default; others, such as a local dev
+//  instance, are added by base URL) and describes each by its
+//  GET /api/atacama-config endpoint. The user picks a server+channel target per
+//  post. See docs/backend-api.md.
 //
 
 import Foundation
@@ -56,7 +57,7 @@ struct ServerConfig: Identifiable, Codable, Hashable {
     var loginPath: String
     /// Whether the server accepts photo uploads (POST /api/images) and serves the
     /// image feed. Nil for servers added before this field existed — treated as
-    /// "unknown, allow" so an existing newslettr server isn't hidden until re-added.
+    /// "unknown, allow" so an existing server isn't hidden until re-added.
     var supportsImages: Bool?
     /// Whether the server serves the public quotes feed (GET /api/quotes). Nil is
     /// treated as "unknown, allow", like supportsImages.
@@ -115,8 +116,9 @@ struct PostTarget: Codable, Hashable {
     var channel: String?
 }
 
-/// Decodable shape of GET /api/atacama-config, served identically by both the
-/// atacama (Flask) and newslettr (Go) backends so one client targets either.
+/// Decodable shape of GET /api/atacama-config, served by the newslettr backend.
+/// The endpoint keeps its historical name — it is a live contract with shipped
+/// clients.
 struct ServerConfigResponse: Decodable {
     let name: String
     let apiBase: String
@@ -138,7 +140,7 @@ struct ServerConfigResponse: Decodable {
         let messages: Bool?
         let channels: Bool?
         /// Whether the server accepts shared links via POST /api/links (backs the
-        /// Share Extension). Absent on older/atacama backends.
+        /// Share Extension). Absent on older backends.
         let links: Bool?
         /// Whether the server accepts photo uploads and serves the image feed.
         let images: Bool?

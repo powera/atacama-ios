@@ -2,7 +2,7 @@
 //  APIClient.swift
 //  Atacama
 //
-//  JSON HTTP client for the atacama / newslettr authoring API. Modeled on trakaido's
+//  JSON HTTP client for the newslettr authoring API. Modeled on trakaido's
 //  APIClient, extended with a POST helper. The app can target multiple servers, so
 //  every authenticated call takes an explicit `ServerConfig`: the request is sent to
 //  that server's `apiBase` with that server's bearer token (from the Keychain).
@@ -38,7 +38,7 @@ enum APIError: LocalizedError {
     }
 }
 
-/// HTTP client for the atacama / newslettr JSON API.
+/// HTTP client for the newslettr JSON API.
 final class APIClient {
     static let shared = APIClient()
 

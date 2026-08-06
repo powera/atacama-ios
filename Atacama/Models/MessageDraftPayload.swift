@@ -27,8 +27,8 @@ struct MessageDraftPayload: Encodable {
 
 /// Response of POST /api/messages (201).
 ///
-/// `id` is decoded as a string so the one client handles both backends: atacama
-/// returns an integer message id, newslettr returns a string GUID (e.g. `pst_…`).
+/// `id` is decoded as a string either way: newslettr returns a string GUID
+/// (e.g. `pst_…`), while older backends returned an integer message id.
 struct CreatedMessage: Decodable {
     let id: String
     let url: String
@@ -44,7 +44,7 @@ struct CreatedMessage: Decodable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         url = try container.decode(String.self, forKey: .url)
         processedContent = try container.decode(String.self, forKey: .processedContent)
-        // Accept either a JSON string (newslettr GUID) or number (atacama id).
+        // Accept either a JSON string (newslettr GUID) or a number (legacy id).
         if let intID = try? container.decode(Int.self, forKey: .id) {
             id = String(intID)
         } else {

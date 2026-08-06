@@ -23,6 +23,18 @@ final class ServerStore: ObservableObject {
     private let defaults: UserDefaults
     private let serversKey = "atacama.servers"
     private let defaultTargetKey = "atacama.defaultTarget"
+    /// Set once the default server has been seeded successfully. Persisted so a
+    /// user who deletes newslettr.com never has it reappear on the next launch.
+    private let hasSeededDefaultKey = "atacama.hasSeededDefault"
+
+    /// The publisher seeded on first launch, so a fresh install goes straight to
+    /// sign-in instead of asking the user to type a base URL. It is an ordinary
+    /// server once added: deletable, and other servers can still be added.
+    static let defaultServerBaseURL = "https://newslettr.com"
+
+    /// Guards against two concurrent seed attempts (app launch and the Servers
+    /// screen both kick one off).
+    private var isSeeding = false
 
     /// Defaults live in the shared App Group suite so the Share Extension reads the
     /// same server list and default target the app wrote. A pre-App-Group install
@@ -91,6 +103,40 @@ final class ServerStore: ObservableObject {
     /// views derived from `signedInServers` re-evaluate.
     func tokensChanged() {
         objectWillChange.send()
+    }
+
+    // MARK: - Default server
+
+    /// Add newslettr.com on first launch so a fresh install lands on sign-in
+    /// rather than an empty "add a server" screen.
+    ///
+    /// Adding a server requires a successful /api/atacama-config fetch, so this
+    /// cannot run from the synchronous `init()`. It is instead called from app
+    /// launch and from the Servers screen, and is idempotent: the flag is set
+    /// only on success, so a first launch with no network retries later rather
+    /// than skipping the seed permanently. Once the flag is set it never seeds
+    /// again — deleting newslettr.com is meant to stick.
+    func seedDefaultServerIfNeeded() async {
+        guard !isSeeding, !defaults.bool(forKey: hasSeededDefaultKey) else { return }
+        isSeeding = true
+        defer { isSeeding = false }
+
+        // A user who added newslettr.com by hand before this shipped shouldn't
+        // end up with a duplicate row.
+        let normalized = TransportSecurity.normalizedBaseURL(Self.defaultServerBaseURL)
+        guard !servers.contains(where: { $0.baseURL == normalized }) else {
+            defaults.set(true, forKey: hasSeededDefaultKey)
+            return
+        }
+
+        do {
+            try await add(baseURL: Self.defaultServerBaseURL)
+            defaults.set(true, forKey: hasSeededDefaultKey)
+        } catch {
+            // Leave the flag unset so the next launch (or a visit to the Servers
+            // screen) tries again. Nothing is surfaced: the user did not ask for
+            // this, and the Add flow remains available.
+        }
     }
 
     // MARK: - Persistence

@@ -25,7 +25,7 @@ struct SignInView: View {
                 .foregroundStyle(.tint)
 
             VStack(spacing: 8) {
-                Text("Atacama")
+                Text("newslettr")
                     .font(.largeTitle.bold())
                 Text("Voice-first authoring")
                     .font(.subheadline)

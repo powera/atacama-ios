@@ -24,7 +24,7 @@ struct PhotoUploadView: View {
     @State private var showError = false
     @State private var isDecoding = false
 
-    /// Servers that advertise photo upload (older/atacama backends are excluded).
+    /// Servers that advertise photo upload (older backends are excluded).
     private var uploadServers: [ServerConfig] {
         serverStore.signedInServers.filter { $0.offersImages }
     }

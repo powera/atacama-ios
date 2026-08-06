@@ -6,7 +6,7 @@
 //  server and token (read from the shared App Group) to post a shared URL to the
 //  backend's POST /api/links endpoint. The extension never signs in itself —
 //  if the app has no signed-in server, sharing is unavailable until the user
-//  opens Atacama and signs in.
+//  opens newslettr and signs in.
 //
 //  This file deliberately duplicates a small slice of the main app's contract
 //  (App Group id, Keychain service/account scheme, the ServerConfig JSON shape)
@@ -64,9 +64,9 @@ private enum SharedKeychain {
     }
 }
 
-/// A topic option for the picker, decoded from GET /api/channels (newslettr
-/// returns `{"topics": [...]}`; atacama returns `{"channels": [...]}` — both are
-/// accepted so one extension targets either backend).
+/// A topic option for the picker, decoded from GET /api/channels. Both the
+/// `{"topics": [...]}` and `{"channels": [...]}` spellings are accepted, since
+/// the two endpoint names are aliases of each other.
 struct ShareTopic: Identifiable, Hashable {
     let id: String
     let name: String
@@ -79,7 +79,7 @@ enum ShareError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notSignedIn:
-            return "Open Atacama and sign in to a server before sharing links."
+            return "Open newslettr and sign in to a server before sharing links."
         case let .server(message):
             return message
         }
@@ -166,7 +166,7 @@ final class ShareStore: ObservableObject {
         case 200...299:
             return
         case 401:
-            throw ShareError.server("Your session expired. Open Atacama and sign in again.")
+            throw ShareError.server("Your session expired. Open newslettr and sign in again.")
         default:
             throw ShareError.server(Self.serverMessage(data) ?? "The server rejected the link (HTTP \(http.statusCode)).")
         }
@@ -190,8 +190,8 @@ final class ShareStore: ObservableObject {
     }
 }
 
-/// Tolerant decoder for the topics list: newslettr keys it `topics`, atacama
-/// keys it `channels`; each item exposes `name` (GUID) and `display_name`.
+/// Tolerant decoder for the topics list: it may be keyed `topics` or the alias
+/// `channels`; each item exposes `name` (slug) and `display_name`.
 private struct TopicsResponse: Decodable {
     let items: [Item]
     let `default`: String?
