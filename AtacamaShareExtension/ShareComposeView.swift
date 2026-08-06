@@ -2,7 +2,7 @@
 //  ShareComposeView.swift
 //  AtacamaShareExtension
 //
-//  The compose UI shown when the user shares a URL into Atacama. It confirms the
+//  The compose UI shown when the user shares a URL into newslettr. It confirms the
 //  link, lets them add a title/comment and pick a topic and a publish/draft
 //  state, and posts to the backend via ShareStore. Hosted by ShareViewController.
 //
@@ -44,7 +44,7 @@ struct ShareComposeView: View {
                     notSignedIn
                 }
             }
-            .navigationTitle("Share to Atacama")
+            .navigationTitle("Share to newslettr")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -112,7 +112,7 @@ struct ShareComposeView: View {
                 Toggle("Save as draft", isOn: $saveAsDraft)
             } footer: {
                 Text(saveAsDraft
-                     ? "Saved unpublished — review it in Atacama before it goes into a digest."
+                     ? "Saved unpublished — review it in newslettr before it goes into a digest."
                      : "Published immediately and eligible for the next digest.")
             }
 

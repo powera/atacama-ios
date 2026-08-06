@@ -3,7 +3,7 @@
 //  Atacama
 //
 //  The set of AML colortext tags an author can apply as a footnote.
-//  Mirrors the COLORS dict in atacama/src/aml_parser/colorblocks.py — keep in sync.
+//  Mirrors the color table in newslettr/internal/aml/generator.go — keep in sync.
 //  See docs/aml-colortext.md.
 //
 

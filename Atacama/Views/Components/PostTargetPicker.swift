@@ -3,10 +3,12 @@
 //  Atacama
 //
 //  Picks where a post goes. A single always-visible, tappable "Post to" button that
-//  opens a menu of `server / channel` choices across all signed-in servers, sectioned
-//  by server. Crucially it stays visible and tappable even before any channels have
-//  loaded — in that state it offers a route to add or sign in to a server, so the
-//  destination control is never a hidden/empty row. See docs/backend-api.md.
+//  opens a menu of `server / channel` choices across all signed-in servers,
+//  sectioned by server and — once the backend reports `Channel.group` — by the
+//  destination reader site within each server. Crucially it stays visible and
+//  tappable even before any channels have loaded — in that state it offers a route
+//  to add or sign in to a server, so the destination control is never a
+//  hidden/empty row. See docs/backend-api.md.
 //
 
 import SwiftUI
@@ -70,14 +72,51 @@ struct PostTargetPicker: View {
         ForEach(servers) { server in
             let channels = sortedChannels(for: server.id)
             if !channels.isEmpty {
-                Section(server.name) {
-                    ForEach(channels) { channel in
-                        Text(channel.displayName)
-                            .tag(Optional(PostTarget(serverID: server.id, channel: channel.name)))
+                ForEach(channelGroups(of: channels), id: \.header) { group in
+                    Section(group.header.isEmpty ? server.name : "\(server.name) — \(group.header)") {
+                        ForEach(group.channels) { channel in
+                            Text(channel.displayName)
+                                .tag(Optional(PostTarget(serverID: server.id, channel: channel.name)))
+                        }
                     }
                 }
             }
         }
+    }
+
+    /// A run of channels sharing a `group`, rendered as one menu section.
+    private struct ChannelGroup {
+        let header: String
+        let channels: [Channel]
+    }
+
+    /// Split a server's channels into menu sections by `Channel.group`, which the
+    /// backend uses for the destination reader site. When no channel carries a
+    /// group (the current backend hardcodes it empty) this yields a single
+    /// un-headered run, so the menu stays exactly as it was. Channels with no
+    /// group alongside grouped ones land in a trailing section under the server
+    /// name rather than being dropped.
+    private func channelGroups(of channels: [Channel]) -> [ChannelGroup] {
+        guard channels.contains(where: { !$0.group.isEmpty }) else {
+            return [ChannelGroup(header: "", channels: channels)]
+        }
+        // `channels` is already sorted by group, so equal groups are adjacent.
+        var groups: [ChannelGroup] = []
+        for channel in channels where !channel.group.isEmpty {
+            if let last = groups.last, last.header == channel.group {
+                groups[groups.count - 1] = ChannelGroup(
+                    header: last.header,
+                    channels: last.channels + [channel]
+                )
+            } else {
+                groups.append(ChannelGroup(header: channel.group, channels: [channel]))
+            }
+        }
+        let ungrouped = channels.filter { $0.group.isEmpty }
+        if !ungrouped.isEmpty {
+            groups.append(ChannelGroup(header: "", channels: ungrouped))
+        }
+        return groups
     }
 
     /// Whether the current selection points at a known signed-in server.

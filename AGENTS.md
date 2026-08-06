@@ -4,13 +4,20 @@
 * CLAUDE.md is a symlink to AGENTS.md.
 * The backend for this app is **newslettr** (the Go server in `../newslettr`).
   API changes go there, not here — this repo is the iOS client only. The
-  obsolete **atacama** repo (`../atacama`, earlyversion.com) is posting-only and
-  no longer the reading/reference backend; new work targets newslettr.
+  **atacama** Flask backend (`../atacama`) is **retired**: newslettr now serves
+  newslettr.com, earlyversion.com, and all the other reader sites. Treat
+  `../atacama` as dead code — do not cite it as a reference or a live backend.
+* The `atacama` name survives in identifiers that cannot be changed cheaply —
+  the App Group, Keychain service, `UserDefaults` keys, bundle ids, the
+  `atacama://` OAuth callback scheme, the `/api/atacama-config` endpoint, and the
+  Xcode project/target/scheme names. These are persisted keys or live
+  client/server contracts: **renaming them signs users out, orphans their stored
+  server list, or breaks OAuth.** Product-facing copy says "newslettr".
 
 ## Project Overview
 
-Atacama iOS is a native iOS app for **fast voice-first authoring** of posts on
-Atacama (earlyversion.com), a semantic publishing CMS. Speech-to-text is the
+newslettr iOS is a native iOS app for **fast voice-first authoring** of posts on
+newslettr (newslettr.com), a semantic publishing CMS. Speech-to-text is the
 primary input method.
 
 Two authoring patterns drive the design:
@@ -44,8 +51,14 @@ The app has three tabs (`RootView`):
 - **STT**: Apple `Speech` framework + `AVAudioEngine`, on-device recognition.
 - **TTS**: `AVSpeechSynthesizer` for reading the draft back for proofing.
 - **Building**: Don't build Swift until the user has explicitly asked. When you do,
-  build for macOS without downloading extra SDKs:
-  `xcodebuild -project Atacama.xcodeproj -scheme Atacama -sdk macosx26.1 build`.
+  build for the **iOS Simulator** without downloading extra SDKs:
+  `xcodebuild -project Atacama.xcodeproj -scheme Atacama -sdk iphonesimulator26.5 -destination 'generic/platform=iOS Simulator' build`.
+  Check the installed SDK version first (`xcodebuild -showsdks`) and substitute
+  it — pinning a version that isn't installed fails immediately.
+  A **macOS** build of the whole scheme cannot work: `AtacamaShareExtension` is
+  iOS-only (`import UIKit` / `UIViewController`), and the app target embeds it,
+  so `-sdk macosx…` fails with "unable to resolve module dependency: 'UIKit'"
+  for both the scheme and the `Atacama` target.
 
 See [docs/](docs/) for architecture notes and the auth flow, and
 [docs/backend-api.md](docs/backend-api.md) for the full backend API spec.
@@ -60,7 +73,7 @@ Authoring endpoints (require `Authorization: Bearer <token>`):
 - `POST /api/login` — `{email, password}` → `{token, expires_at}`.
 - `POST /api/preview` — `{content}` → `{processed_content}`.
 - `POST /api/messages` (alias `/api/posts`) — create a post.
-- `POST /api/links` — save a shared link (backs the Share Extension; both backends).
+- `POST /api/links` — save a shared link (backs the Share Extension).
 - `GET /api/channels` (alias `/api/topics`) — channel/topic list for the picker.
 - `POST /api/logout` — revoke the bearer token.
 
@@ -117,7 +130,8 @@ atacama-ios/
 
 The draft is plain editable text. When the author adds a **colortext footnote**, the
 selected span is wrapped in the chosen AML color tag (e.g. `(green: …)` /
-`<green> … >>>`, exact syntax confirmed against the atacama parser). `Draft.toAML()`
+`<green> … >>>`, exact syntax confirmed against newslettr's AML parser in
+`../newslettr/internal/aml/`). `Draft.toAML()`
 produces the final `content` string sent to `POST /api/messages`.
 
 Always preview via `POST /api/preview` rather than reimplementing AML rendering on

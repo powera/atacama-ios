@@ -23,6 +23,9 @@ struct AtacamaApp: App {
                 .onOpenURL { url in
                     session.handleCallback(url)
                 }
+                .task {
+                    await serverStore.seedDefaultServerIfNeeded()
+                }
         }
     }
 }
