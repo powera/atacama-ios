@@ -42,8 +42,9 @@ final class ServerStore: ObservableObject {
     init(defaults: UserDefaults = AppGroup.defaults) {
         self.defaults = defaults
         Self.migrateFromStandardIfNeeded(into: defaults, keys: [serversKey, defaultTargetKey])
-        self.servers = (Self.decode([ServerConfig].self, from: defaults, key: serversKey) ?? [])
+        let stored = (Self.decode([ServerConfig].self, from: defaults, key: serversKey) ?? [])
             .map { $0.usingSecureTransportDefaults() }
+        self.servers = Self.deduplicated(stored)
         self.defaultTarget = Self.decode(PostTarget.self, from: defaults, key: defaultTargetKey)
         persist()
     }
@@ -64,11 +65,20 @@ final class ServerStore: ObservableObject {
 
     /// Add a server by base URL: fetch its /api/atacama-config, build a
     /// ServerConfig, persist it, and return it. Throws if discovery fails.
+    ///
+    /// A server already in the list is **updated in place** rather than added
+    /// again: adding newslettr.com twice used to produce two rows that were
+    /// indistinguishable in the UI but held separate ids, so each carried its own
+    /// Keychain token and the target picker offered the same site twice. Keeping
+    /// the existing id preserves the stored token and any default target pointing
+    /// at it, while refreshing the name and capabilities the server now reports.
     @discardableResult
     func add(baseURL: String) async throws -> ServerConfig {
         let normalized = TransportSecurity.normalizedBaseURL(baseURL)
         let response = try await APIClient.shared.serverConfig(baseURL: normalized)
+        let existing = servers.first { $0.matches(baseURL: normalized) }
         let server = ServerConfig(
+            id: existing?.id ?? UUID(),
             baseURL: normalized,
             name: response.name.isEmpty ? host(of: response.apiBase) : response.name,
             apiBase: TransportSecurity.normalizedBaseURL(response.apiBase),
@@ -77,9 +87,20 @@ final class ServerStore: ObservableObject {
             supportsImages: response.capabilities?.images,
             supportsQuotes: response.capabilities?.quotes
         )
-        servers.append(server)
+        if let index = servers.firstIndex(where: { $0.id == server.id }) {
+            servers[index] = server
+        } else {
+            servers.append(server)
+        }
         persist()
         return server
+    }
+
+    /// Whether a base URL is already configured. Lets the Add sheet say so before
+    /// a round-trip, rather than silently replacing a row the user forgot about.
+    func contains(baseURL: String) -> Bool {
+        let normalized = TransportSecurity.normalizedBaseURL(baseURL)
+        return servers.contains { $0.matches(baseURL: normalized) }
     }
 
     /// Remove a server and its stored token. Clears the default target if it
@@ -123,8 +144,7 @@ final class ServerStore: ObservableObject {
 
         // A user who added newslettr.com by hand before this shipped shouldn't
         // end up with a duplicate row.
-        let normalized = TransportSecurity.normalizedBaseURL(Self.defaultServerBaseURL)
-        guard !servers.contains(where: { $0.baseURL == normalized }) else {
+        guard !contains(baseURL: Self.defaultServerBaseURL) else {
             defaults.set(true, forKey: hasSeededDefaultKey)
             return
         }
@@ -150,6 +170,25 @@ final class ServerStore: ObservableObject {
         } else {
             defaults.removeObject(forKey: defaultTargetKey)
         }
+    }
+
+    /// Collapse servers that share a base URL, keeping the first occurrence.
+    /// Duplicates could be created before `add` merged them, so an existing
+    /// install is cleaned up on the next launch rather than left with rows the
+    /// user cannot tell apart. The kept row is the earlier one, which is the one
+    /// a stored default target is most likely to point at; the dropped rows'
+    /// tokens are deleted so they do not linger in the Keychain unreferenced.
+    private static func deduplicated(_ servers: [ServerConfig]) -> [ServerConfig] {
+        var seen = Set<String>()
+        var result: [ServerConfig] = []
+        for server in servers {
+            if seen.insert(ServerConfig.identity(of: server.baseURL)).inserted {
+                result.append(server)
+            } else {
+                KeychainStore.deleteToken(for: server.id)
+            }
+        }
+        return result
     }
 
     private static func decode<T: Decodable>(_ type: T.Type, from defaults: UserDefaults, key: String) -> T? {

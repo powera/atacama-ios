@@ -87,6 +87,30 @@ struct ServerConfig: Identifiable, Codable, Hashable {
     /// up for now; password servers are shown but not yet signable.
     var supportsSignIn: Bool { authType == "oauth" }
 
+    /// Whether this server is the one at `baseURL`. Duplicate detection compares
+    /// the *identity* of the URL rather than the exact string the user typed, so
+    /// "newslettr.com", "https://NEWSLETTR.com" and a trailing slash are one
+    /// server and not three rows in the list.
+    func matches(baseURL other: String) -> Bool {
+        ServerConfig.identity(of: self.baseURL) == ServerConfig.identity(of: other)
+    }
+
+    /// Canonical comparison key for a base URL: scheme-insensitive host plus port
+    /// and path, lowercased, without a trailing slash. Scheme is excluded because
+    /// TransportSecurity may have upgraded one of the two to https.
+    static func identity(of urlString: String) -> String {
+        let normalized = TransportSecurity.normalizedBaseURL(urlString)
+        guard let components = URLComponents(string: normalized), let host = components.host else {
+            return normalized.lowercased()
+        }
+        var key = host.lowercased()
+        if let port = components.port {
+            key += ":\(port)"
+        }
+        let path = components.path.hasSuffix("/") ? String(components.path.dropLast()) : components.path
+        return key + path.lowercased()
+    }
+
     /// Whether to offer photo upload for this server. Absent capability info
     /// (older stored servers) is treated as allowed; only an explicit false hides it.
     var offersImages: Bool { supportsImages != false }
