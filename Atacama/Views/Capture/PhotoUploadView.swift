@@ -16,11 +16,14 @@ struct PhotoUploadView: View {
     @ObservedObject private var serverStore = ServerStore.shared
     @ObservedObject private var draftStore = DraftStore.shared
     @StateObject private var store = PhotoUploadStore.shared
+    @Environment(\.openURL) private var openURL
 
     @State private var pickerItem: PhotosPickerItem?
     @State private var showCamera = false
     @State private var showServers = false
-    @State private var uploadedMessage: String?
+    /// The just-uploaded photo, driving the success alert. Held whole (rather than
+    /// as a message string) so the alert can offer to open it on the site.
+    @State private var uploaded: AtacamaImage?
     @State private var showError = false
     @State private var isDecoding = false
 
@@ -62,10 +65,24 @@ struct PhotoUploadView: View {
                 guard let item else { return }
                 Task { await loadPicked(item) }
             }
-            .alert("Photo uploaded", isPresented: .constant(uploadedMessage != nil)) {
-                Button("Add another") { uploadedMessage = nil }
+            // A real read/write binding: `isPresented: .constant(...)` cannot be
+            // written back, so the alert could not clear its own state on dismiss.
+            .alert("Photo uploaded", isPresented: Binding(
+                get: { uploaded != nil },
+                set: { if !$0 { uploaded = nil } }
+            )) {
+                Button("Add another") { uploaded = nil }
+                // Drafts are not in the public feed, so there is nothing to open
+                // for them — the publisher is where a draft gets finished.
+                if let image = uploaded, !image.isDraft, let url = URL(string: image.url) {
+                    Button("View on site") {
+                        uploaded = nil
+                        openURL(url)
+                    }
+                }
+                Button("Done", role: .cancel) { uploaded = nil }
             } message: {
-                Text(uploadedMessage ?? "")
+                Text(uploadedSummary)
             }
             .alert("Couldn’t continue", isPresented: $showError) {
                 Button("OK") { store.lastError = nil }
@@ -184,11 +201,17 @@ struct PhotoUploadView: View {
         store.imageData = jpeg
     }
 
+    /// The success alert's body text for the just-uploaded photo.
+    private var uploadedSummary: String {
+        guard let image = uploaded else { return "" }
+        return image.isDraft
+            ? "Saved as a draft on \(image.topic.name). Caption or publish it in the publisher."
+            : "Published to \(image.topic.name)."
+    }
+
     private func upload() async {
         if let image = await store.upload() {
-            uploadedMessage = image.isDraft
-                ? "Saved as a draft on \(image.topic.name). Caption or publish it in the publisher."
-                : "Published to \(image.topic.name)."
+            uploaded = image
             pickerItem = nil
         } else if store.lastError != nil {
             showError = true
