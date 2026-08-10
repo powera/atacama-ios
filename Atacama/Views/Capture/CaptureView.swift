@@ -123,6 +123,7 @@ struct CaptureView: View {
                     html: previewHTML,
                     readAloudText: store.draft.body,
                     baseURL: store.targetServer?.apiBase,
+                    styleOrigin: colortextStyleOrigin,
                     tts: tts
                 )
             }
@@ -284,6 +285,21 @@ struct CaptureView: View {
         .disabled(store.draft.isEmpty || store.targetServer == nil || store.isSubmitting)
     }
 
+    /// Origin to load the preview's colortext stylesheet from.
+    ///
+    /// Deliberately *not* the authoring server: reader and publisher are separate
+    /// services, and the publisher host (newslettr.com) gates
+    /// /reader/static/ behind its login, so the stylesheet 303s there. Prefer a
+    /// read-only content domain, which serves it publicly; fall back to the
+    /// reading server, then the target server.
+    private var colortextStyleOrigin: String? {
+        let servers = ServerStore.shared.servers
+        if let contentDomain = servers.first(where: \.isReadOnly) {
+            return contentDomain.baseURL
+        }
+        return ReadingStore.shared.readingServer?.baseURL ?? store.targetServer?.baseURL
+    }
+
     // MARK: - Actions
 
     private func toggleDictation() async {
@@ -369,6 +385,8 @@ private struct PreviewSheet: View {
     let readAloudText: String
     /// API base of the server the preview was rendered by, for asset resolution.
     var baseURL: String?
+    /// Origin the colortext stylesheet is loaded from.
+    var styleOrigin: String?
     @ObservedObject var tts: TTSService
     @Environment(\.dismiss) private var dismiss
 
@@ -376,7 +394,7 @@ private struct PreviewSheet: View {
         NavigationStack {
             Group {
                 if let html {
-                    HTMLView(html: html, baseURL: baseURL)
+                    HTMLView(html: html, baseURL: baseURL, styleOrigin: styleOrigin)
                 } else {
                     ContentUnavailableView("No preview", systemImage: "eye.slash")
                 }

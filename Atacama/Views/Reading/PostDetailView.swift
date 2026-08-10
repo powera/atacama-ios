@@ -60,7 +60,13 @@ struct PostDetailView: View {
             .padding(.horizontal)
             .padding(.top, 8)
 
-            HTMLView(html: bodyWithReferences(detail), baseURL: reading.readingServer?.baseURL)
+            HTMLView(
+                html: bodyWithReferences(detail),
+                baseURL: reading.readingServer?.baseURL,
+                // The reading server is a content domain, which serves the
+                // stylesheet publicly.
+                styleOrigin: reading.readingServer?.baseURL
+            )
         }
     }
 
