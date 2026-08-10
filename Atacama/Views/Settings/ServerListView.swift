@@ -17,7 +17,8 @@ struct ServerListView: View {
     @State private var showAddServer = false
     @State private var isSeeding = false
     /// The server awaiting delete confirmation. Removing a server signs it out,
-    /// so it is worth a confirm step rather than a bare swipe.
+    /// so it is worth a confirm step rather than a bare swipe. The confirm
+    /// dialog reads this directly, so it always acts on the row last tapped.
     @State private var serverToDelete: ServerConfig?
 
     var body: some View {
@@ -69,19 +70,29 @@ struct ServerListView: View {
                     ToolbarItem(placement: .topBarLeading) { EditButton() }
                 }
             }
+            // A real read/write binding, not `isPresented: .constant(...)` +
+            // `presenting:`. A constant binding cannot be written back on
+            // dismiss, and the presented value was captured when the dialog
+            // first appeared — tapping Remove on a second row reused the stale
+            // capture and deleted the *first* server. Reading `serverToDelete`
+            // in the action closure always acts on the row last tapped.
             .confirmationDialog(
-                serverToDelete.map { "Remove \($0.name)?" } ?? "Remove server?",
-                isPresented: .constant(serverToDelete != nil),
-                titleVisibility: .visible,
-                presenting: serverToDelete
-            ) { server in
-                Button("Remove", role: .destructive) {
-                    serverStore.remove(server)
-                    session.refreshSignedInState()
-                    serverToDelete = nil
+                "Remove \(serverToDelete?.name ?? "server")?",
+                isPresented: Binding(
+                    get: { serverToDelete != nil },
+                    set: { if !$0 { serverToDelete = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                if let server = serverToDelete {
+                    Button("Remove", role: .destructive) {
+                        serverStore.remove(server)
+                        session.refreshSignedInState()
+                        serverToDelete = nil
+                    }
                 }
                 Button("Cancel", role: .cancel) { serverToDelete = nil }
-            } message: { _ in
+            } message: {
                 Text("This signs you out of the server and removes it from the list.")
             }
             .sheet(isPresented: $showAddServer) {
@@ -142,6 +153,9 @@ private struct ServerRow: View {
                 }
             }
 
+            // `.borderless` scopes each button's hit area to its own label. With
+            // the default List button styling, several buttons in one row share
+            // the row's tap area, so a tap on "Sign in" also triggered "Remove".
             HStack(spacing: 16) {
                 if isSignedIn {
                     Label("Signed in", systemImage: "checkmark.circle.fill")
@@ -180,6 +194,7 @@ private struct ServerRow: View {
                 Button("Remove", role: .destructive, action: onDelete)
                     .font(.caption)
             }
+            .buttonStyle(.borderless)
         }
         .padding(.vertical, 4)
     }
