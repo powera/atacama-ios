@@ -18,6 +18,7 @@ enum APIError: LocalizedError {
     case httpError(Int, String)
     case networkError(Error)
     case unauthorized
+    case forbidden(String)
     case serverError
 
     var errorDescription: String? {
@@ -32,6 +33,8 @@ enum APIError: LocalizedError {
             return "Network error: \(error.localizedDescription)"
         case .unauthorized:
             return "Unauthorized — please sign in again"
+        case let .forbidden(message):
+            return message
         case .serverError:
             return "Server error — please try again later"
         }
@@ -136,6 +139,20 @@ final class APIClient {
         }
     }
 
+    /// Pull the human-readable detail out of newslettr's JSON error envelope
+    /// (`{"error", "message", "code"}`), so a failure surfaces as a sentence
+    /// rather than a raw JSON dump. Nil when the body isn't that shape.
+    private static func serverMessage(from data: Data) -> String? {
+        struct ErrorBody: Decodable { let message: String? }
+        guard let body = try? JSONDecoder().decode(ErrorBody.self, from: data),
+              let message = body.message,
+              !message.isEmpty
+        else {
+            return nil
+        }
+        return message
+    }
+
     private func send<T: Decodable>(_ request: URLRequest) async throws -> T {
         do {
             let (data, response) = try await session.data(for: request)
@@ -150,8 +167,20 @@ final class APIClient {
             case 401:
                 NSLog("❌ 401 Unauthorized")
                 throw APIError.unauthorized
+            case 403:
+                // The token is valid; the account just lacks the poster role for
+                // this action. Deliberately not .unauthorized: the caller must
+                // keep the credential rather than sign in again into the same
+                // refusal.
+                NSLog("❌ 403 Forbidden")
+                throw APIError.forbidden(
+                    Self.serverMessage(from: data)
+                        ?? "This account isn’t allowed to publish to this server."
+                )
             case 400 ... 499:
-                let message = String(data: data, encoding: .utf8) ?? "Client error"
+                let message = Self.serverMessage(from: data)
+                    ?? String(data: data, encoding: .utf8)
+                    ?? "Client error"
                 throw APIError.httpError(httpResponse.statusCode, message)
             case 500 ... 599:
                 throw APIError.serverError

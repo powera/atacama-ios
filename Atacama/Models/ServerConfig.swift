@@ -51,9 +51,13 @@ struct ServerConfig: Identifiable, Codable, Hashable {
     var name: String
     /// Absolute API base the client prefixes onto "/api/..." paths.
     var apiBase: String
-    /// Authentication flow this server uses: "oauth" or "password".
+    /// Authentication flow this server uses: "oauth", "password", or "none".
+    /// A reader-only content domain (blog.pow3.com, earlyversion.com, …) reports
+    /// "none": it serves the public feeds and has no sign-in to offer.
     var authType: String
-    /// Login path opened for the OAuth flow (from the config endpoint).
+    /// Login path opened for the OAuth flow (from the config endpoint). Empty for
+    /// an auth type that has no login page, which is why it is not optional here:
+    /// callers want "nothing to open", not "unknown".
     var loginPath: String
     /// Whether the server accepts photo uploads (POST /api/images) and serves the
     /// image feed. Nil for servers added before this field existed — treated as
@@ -62,6 +66,14 @@ struct ServerConfig: Identifiable, Codable, Hashable {
     /// Whether the server serves the public quotes feed (GET /api/quotes). Nil is
     /// treated as "unknown, allow", like supportsImages.
     var supportsQuotes: Bool?
+    /// Whether the server accepts posts (POST /api/messages) and serves the
+    /// channel list. False on a reader-only content domain, which advertises
+    /// `messages: false` because authoring lives on the publisher. Nil is
+    /// "unknown, allow", like supportsImages.
+    var supportsMessages: Bool?
+    /// Whether the server renders AML previews (POST /api/preview). Nil is
+    /// "unknown, allow", like supportsImages.
+    var supportsPreview: Bool?
 
     init(
         id: UUID = UUID(),
@@ -71,7 +83,9 @@ struct ServerConfig: Identifiable, Codable, Hashable {
         authType: String,
         loginPath: String,
         supportsImages: Bool? = nil,
-        supportsQuotes: Bool? = nil
+        supportsQuotes: Bool? = nil,
+        supportsMessages: Bool? = nil,
+        supportsPreview: Bool? = nil
     ) {
         self.id = id
         self.baseURL = baseURL
@@ -81,11 +95,21 @@ struct ServerConfig: Identifiable, Codable, Hashable {
         self.loginPath = loginPath
         self.supportsImages = supportsImages
         self.supportsQuotes = supportsQuotes
+        self.supportsMessages = supportsMessages
+        self.supportsPreview = supportsPreview
     }
 
     /// Whether the app can currently sign in to this server. Only OAuth is wired
-    /// up for now; password servers are shown but not yet signable.
-    var supportsSignIn: Bool { authType == "oauth" }
+    /// up for now; password servers are shown but not yet signable. A server that
+    /// reports no login path has nothing to open even if it names a flow, so both
+    /// halves are required — otherwise a read-only domain would present a sign-in
+    /// button that loads its bare home page.
+    var supportsSignIn: Bool { authType == "oauth" && !loginPath.isEmpty }
+
+    /// Whether this server is a reader-only content domain: it advertises no
+    /// sign-in flow at all. Distinct from "sign-in not wired up yet" (a password
+    /// server), which is a client gap rather than the server's nature.
+    var isReadOnly: Bool { authType == "none" }
 
     /// Whether this server is the one at `baseURL`. Duplicate detection compares
     /// the *identity* of the URL rather than the exact string the user typed, so
@@ -111,11 +135,25 @@ struct ServerConfig: Identifiable, Codable, Hashable {
         return key + path.lowercased()
     }
 
-    /// Whether to offer photo upload for this server. Absent capability info
+    /// Whether to offer the image feed for this server. Absent capability info
     /// (older stored servers) is treated as allowed; only an explicit false hides it.
+    ///
+    /// This is the *reading* capability. A reader-only domain reports
+    /// `images: true` because it serves the photo feed while accepting no
+    /// uploads, so the Photo tab must gate on `offersAuthoring` as well.
     var offersImages: Bool { supportsImages != false }
     /// Whether to offer the quotes feed for this server (same nil-as-allowed rule).
     var offersQuotes: Bool { supportsQuotes != false }
+    /// Whether this server can accept content at all: it takes posts and can list
+    /// the channels to file them under. A reader-only content domain reports
+    /// `messages: false`, and every authoring POST against it 404s, so it must not
+    /// appear as a post target.
+    var offersAuthoring: Bool { supportsMessages != false }
+    /// Whether to ask this server to render an AML preview (same nil-as-allowed rule).
+    var offersPreview: Bool { supportsPreview != false }
+    /// Whether to offer photo *upload* here — authoring, so it needs both the
+    /// image capability and the ability to accept content.
+    var offersImageUpload: Bool { offersImages && offersAuthoring }
 
     /// Copy with ATS-safe base URLs. This also fixes servers saved before the
     /// client enforced HTTPS for non-local backends.
@@ -128,7 +166,9 @@ struct ServerConfig: Identifiable, Codable, Hashable {
             authType: authType,
             loginPath: loginPath,
             supportsImages: supportsImages,
-            supportsQuotes: supportsQuotes
+            supportsQuotes: supportsQuotes,
+            supportsMessages: supportsMessages,
+            supportsPreview: supportsPreview
         )
     }
 }
@@ -151,7 +191,11 @@ struct ServerConfigResponse: Decodable {
 
     struct Auth: Decodable {
         let type: String
-        let loginPath: String
+        /// Absent when the server offers no sign-in. A reader-only content domain
+        /// answers `{"type": "none"}` with no `login_path` at all, so requiring
+        /// this key made discovery throw for every content domain — the one thing
+        /// those hosts exist to support.
+        let loginPath: String?
 
         enum CodingKeys: String, CodingKey {
             case type

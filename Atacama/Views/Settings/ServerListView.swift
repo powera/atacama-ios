@@ -163,6 +163,12 @@ private struct ServerRow: View {
                     }
                     .font(.caption)
                     .disabled(session.isSigningIn(server))
+                } else if server.isReadOnly {
+                    // A content domain that serves only the public feeds. This is
+                    // its normal, complete state — not a gap to apologise for.
+                    Text("Read-only site")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 } else {
                     Text("Sign-in not supported yet")
                         .font(.caption)

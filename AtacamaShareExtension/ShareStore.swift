@@ -34,6 +34,13 @@ struct SharedServer: Decodable, Identifiable, Hashable {
     let id: UUID
     let name: String
     let apiBase: String
+    /// Mirrors ServerConfig.supportsMessages. Absent for servers stored before
+    /// the field existed, which is "unknown, allow" — same rule as the app.
+    let supportsMessages: Bool?
+
+    /// Whether this server accepts content. A reader-only content domain 404s
+    /// POST /api/links, so it is never a share destination.
+    var offersAuthoring: Bool { supportsMessages != false }
 }
 
 /// Mirror of the app's PostTarget for reading the default server selection.
@@ -106,7 +113,7 @@ final class ShareStore: ObservableObject {
         session = URLSession(configuration: configuration)
 
         let all = Self.decode([SharedServer].self, key: SharedAppGroup.serversKey) ?? []
-        signedInServers = all.filter { SharedKeychain.token(for: $0.id) != nil }
+        signedInServers = all.filter { $0.offersAuthoring && SharedKeychain.token(for: $0.id) != nil }
 
         let defaultServerID = Self.decode(SharedTarget.self, key: SharedAppGroup.defaultTargetKey)?.serverID
         selectedServer = signedInServers.first { $0.id == defaultServerID } ?? signedInServers.first

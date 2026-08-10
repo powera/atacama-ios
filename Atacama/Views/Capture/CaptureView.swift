@@ -189,7 +189,10 @@ struct CaptureView: View {
     /// submission metadata is visible before any authoring instructions or editor chrome.
     private var postTargetPicker: some View {
         PostTargetPicker(
-            servers: serverStore.signedInServers,
+            // Only servers that accept content are post destinations. A
+            // reader-only content domain serves the public feeds and 404s every
+            // authoring POST, so offering it here would guarantee a failed post.
+            servers: serverStore.signedInServers.filter(\.offersAuthoring),
             channelsByServer: store.channelsByServer,
             selection: $store.target,
             onManageServers: { showServers = true }

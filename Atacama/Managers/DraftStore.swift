@@ -84,7 +84,11 @@ final class DraftStore: ObservableObject {
     /// surfaced but don't block the others. Picks a sensible default target/channel
     /// if none is selected yet.
     func loadChannels() async {
-        let servers = ServerStore.shared.signedInServers
+        // Only servers that accept content have a channel list to fetch. A
+        // reader-only content domain serves the public feeds and 404s
+        // GET /api/channels, so asking would surface an error for a server the
+        // user never intended to post to.
+        let servers = ServerStore.shared.signedInServers.filter(\.offersAuthoring)
         for server in servers {
             do {
                 let list = try await APIClient.shared.channels(on: server)

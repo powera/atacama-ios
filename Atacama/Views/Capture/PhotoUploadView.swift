@@ -25,8 +25,11 @@ struct PhotoUploadView: View {
     @State private var isDecoding = false
 
     /// Servers that advertise photo upload (older backends are excluded).
+    /// `offersImageUpload` requires the authoring capability too: a reader-only
+    /// content domain reports `images: true` for its photo *feed* while accepting
+    /// no uploads at all.
     private var uploadServers: [ServerConfig] {
-        serverStore.signedInServers.filter { $0.offersImages }
+        serverStore.signedInServers.filter(\.offersImageUpload)
     }
 
     var body: some View {

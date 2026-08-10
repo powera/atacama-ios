@@ -63,7 +63,9 @@ final class SessionManager: NSObject, ObservableObject {
     func signIn(server: ServerConfig) {
         guard signingInServerID == nil else { return }
         guard server.supportsSignIn else {
-            lastError = "Sign-in for this server type isn’t supported yet."
+            lastError = server.isReadOnly
+                ? "\(server.name) is a read-only site — there's nothing to sign in to."
+                : "Sign-in for this server type isn’t supported yet."
             return
         }
         signingInServerID = server.id
