@@ -51,7 +51,9 @@ The app has three tabs (`RootView`):
 - **STT**: Apple `Speech` framework + `AVAudioEngine`, on-device recognition.
 - **TTS**: `AVSpeechSynthesizer` for reading the draft back for proofing.
 - **Building**: Don't build Swift until the user has explicitly asked. When you do,
-  build for the **iOS Simulator** without downloading extra SDKs:
+  build for the **iOS Simulator** without downloading extra SDKs, from the
+  **repo root** (where `Atacama.xcodeproj` lives — `cd Atacama` first and
+  xcodebuild fails with "'Atacama.xcodeproj' does not exist"):
   `xcodebuild -project Atacama.xcodeproj -scheme Atacama -sdk iphonesimulator26.5 -destination 'generic/platform=iOS Simulator' build`.
   Check the installed SDK version first (`xcodebuild -showsdks`) and substitute
   it — pinning a version that isn't installed fails immediately.
@@ -104,7 +106,9 @@ the shared constants in sync with `AppGroup.swift` / `KeychainStore.swift` /
 atacama-ios/
 ├── AGENTS.md / CLAUDE.md (symlink)
 ├── docs/                          # backend-api.md, architecture, auth flow
-└── Atacama/                       # Atacama.xcodeproj (synchronized file-system group:
+├── Atacama.xcodeproj              # at the repo root, NOT inside Atacama/ —
+│                                  #   run xcodebuild from the root
+└── Atacama/                       # sources (synchronized file-system group:
     │                              #   new .swift files under Atacama/ are auto-compiled)
     ├── AtacamaApp.swift           # @main; RootView tabs; registers atacama:// (.onOpenURL)
     ├── Models/
