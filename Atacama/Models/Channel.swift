@@ -14,8 +14,9 @@ struct Channel: Identifiable, Decodable, Hashable {
     let name: String
     /// Human-readable label for the picker.
     let displayName: String
-    /// Channel group, used to section the picker. Newslettr sends "" until the
-    /// topic→site mapping is a real reverse lookup, so treat it as optional.
+    /// Public reader host where this channel's posts appear, used to section and
+    /// label the destination picker. Older servers may omit it, so an empty value
+    /// falls back to the authoring server's name.
     let group: String
     /// Whether the channel is non-public. Newslettr now reports the channel's
     /// real access level here (it used to hardcode false), so this can be true

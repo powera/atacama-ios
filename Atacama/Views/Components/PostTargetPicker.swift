@@ -2,10 +2,9 @@
 //  PostTargetPicker.swift
 //  Atacama
 //
-//  Picks where a post goes. A single always-visible, tappable "Post to" button that
-//  opens a menu of `server / channel` choices across all signed-in servers,
-//  sectioned by server and — once the backend reports `Channel.group` — by the
-//  destination reader site within each server. Crucially it stays visible and
+//  Picks where a post appears. A single always-visible, tappable "Appears on"
+//  button opens a menu of reader-site / channel choices across all signed-in
+//  publisher servers. Crucially it stays visible and
 //  tappable even before any channels have loaded — in that state it offers a route
 //  to add or sign in to a server, so the destination control is never a
 //  hidden/empty row. See docs/backend-api.md.
@@ -26,7 +25,7 @@ struct PostTargetPicker: View {
     var body: some View {
         Menu {
             if hasAnyChannels {
-                Picker("Post to", selection: $selection) {
+                Picker("Appears on", selection: $selection) {
                     pickerOptions
                 }
             } else {
@@ -47,7 +46,7 @@ struct PostTargetPicker: View {
                 .font(.subheadline)
                 .foregroundStyle(.tint)
             VStack(alignment: .leading, spacing: 1) {
-                Text("Post to")
+                Text("Appears on")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                 Text(currentLabel)
@@ -73,7 +72,7 @@ struct PostTargetPicker: View {
             let channels = sortedChannels(for: server.id)
             if !channels.isEmpty {
                 ForEach(channelGroups(of: channels), id: \.header) { group in
-                    Section(group.header.isEmpty ? server.name : "\(server.name) — \(group.header)") {
+                    Section(group.header.isEmpty ? server.name : "\(group.header) — via \(server.name)") {
                         ForEach(group.channels) { channel in
                             Text(channel.displayName)
                                 .tag(Optional(PostTarget(serverID: server.id, channel: channel.name)))
@@ -90,10 +89,9 @@ struct PostTargetPicker: View {
         let channels: [Channel]
     }
 
-    /// Split a server's channels into menu sections by `Channel.group`, which the
-    /// backend uses for the destination reader site. When no channel carries a
-    /// group (the current backend hardcodes it empty) this yields a single
-    /// un-headered run, so the menu stays exactly as it was. Channels with no
+    /// Split a publisher's channels into menu sections by `Channel.group`, which
+    /// the backend uses for the destination reader site. When an older backend
+    /// omits the group this yields a single un-headered run. Channels with no
     /// group alongside grouped ones land in a trailing section under the server
     /// name rather than being dropped.
     private func channelGroups(of channels: [Channel]) -> [ChannelGroup] {
@@ -129,7 +127,8 @@ struct PostTargetPicker: View {
         channelsByServer.values.contains { !$0.isEmpty }
     }
 
-    /// Short "server / channel" description of the current selection, or a prompt.
+    /// Short "reader site / channel" description of the current selection, or a
+    /// publisher fallback for servers that predate destination-site metadata.
     private var currentLabel: String {
         guard isChosen, let selection,
               let server = servers.first(where: { $0.id == selection.serverID })
@@ -137,10 +136,16 @@ struct PostTargetPicker: View {
         guard let channel = selection.channel else {
             return "\(server.name) / default"
         }
-        let channelName = (channelsByServer[server.id] ?? [])
-            .first(where: { $0.name == channel })?
-            .displayName ?? channel
-        return "\(server.name) / \(channelName)"
+        let selectedChannel = (channelsByServer[server.id] ?? [])
+            .first(where: { $0.name == channel })
+        let channelName = selectedChannel?.displayName ?? channel
+        let publicSite: String
+        if let group = selectedChannel?.group, !group.isEmpty {
+            publicSite = group
+        } else {
+            publicSite = server.name
+        }
+        return "\(publicSite) / \(channelName)"
     }
 
     private func sortedChannels(for serverID: UUID) -> [Channel] {

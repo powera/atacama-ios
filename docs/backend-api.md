@@ -203,12 +203,10 @@ List the channels the authenticated user may post to, for the channel picker.
 Implemented in newslettr as `apiTopics`, where `/api/channels` is an alias of
 `/api/topics` and `name` carries the topic **slug**.
 
-> **Current limitation.** `apiTopics` returns every topic in the store and
-> hardcodes `group: ""` and `requires_auth: false` — it does not yet filter by
-> what the token's user may actually post to. Per-user write authorization is
-> pending the multi-tenant work. The client renders `group` as a picker section
-> header when non-empty, so populating it with the destination reader-site name
-> will light up grouped destinations with no client change.
+> newslettr filters this list to topics the token may post to and sets `group`
+> to the reader host that serves the topic (for example `blog.pow3.com`).
+> Authoring requests still go to the publisher's `api_base`; the group tells the
+> app where the published post will appear.
 
 **Request**
 ```http
@@ -220,10 +218,10 @@ Authorization: Bearer <token>
 ```json
 {
   "channels": [
-    { "name": "personal", "display_name": "Personal", "group": "Personal", "requires_auth": true },
-    { "name": "general",  "display_name": "General",  "group": "General",  "requires_auth": false }
+    { "name": "programming", "display_name": "Programming", "group": "blog.pow3.com", "requires_auth": false },
+    { "name": "personal", "display_name": "Personal", "group": "earlyversion.com", "requires_auth": true }
   ],
-  "default": "personal"
+  "default": "programming"
 }
 ```
 
@@ -233,7 +231,7 @@ Authorization: Bearer <token>
 ### Field reference
 - `channels[].name` — channel id used in `POST /api/messages`'s `channel` field.
 - `channels[].display_name` — human-readable label for the picker.
-- `channels[].group` — channel group, for sectioning the picker.
+- `channels[].group` — public reader host where the channel's posts appear.
 - `channels[].requires_auth` — whether the channel is non-public (informational).
 - `default` — the channel pre-selected in the picker (the server's default
   channel).
