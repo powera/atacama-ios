@@ -6,6 +6,9 @@
 //  filtered by topic and date range (mirroring the web reader). Reading is
 //  public, so this works without sign-in. Tapping a post opens PostDetailView.
 //
+//  The toolbar menu also opens MutedChannelsView, which hides whole channels
+//  from this tab for good — a standing preference, unlike the filters here.
+//
 
 import SwiftUI
 
@@ -13,6 +16,7 @@ struct ReadingView: View {
     @EnvironmentObject private var reading: ReadingStore
     @EnvironmentObject private var serverStore: ServerStore
     @State private var showingFilters = false
+    @State private var showingMutedChannels = false
 
     var body: some View {
         NavigationStack {
@@ -26,11 +30,7 @@ struct ReadingView: View {
                             description: Text("Add a newslettr server in Settings to start reading.")
                         )
                     } else if reading.isEmpty, !reading.isLoading {
-                        ContentUnavailableView(
-                            "Nothing here",
-                            systemImage: reading.kind.systemImage,
-                            description: Text(reading.lastError ?? "Nothing matches the current filters.")
-                        )
+                        emptyState
                     } else {
                         feedContent
                     }
@@ -39,18 +39,32 @@ struct ReadingView: View {
             }
             .navigationTitle("Read")
             .toolbar {
-                if reading.kind.isFilterable {
-                    ToolbarItem(placement: .primaryAction) {
-                        Button {
-                            showingFilters = true
-                        } label: {
-                            Label("Filters", systemImage: filtersActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                ToolbarItem(placement: .primaryAction) {
+                    // A menu rather than a bare Filters button: muting a channel
+                    // is a standing preference and the date/topic filters are a
+                    // transient slice, so they should not share one sheet — and
+                    // muting has to stay reachable on Links and Quotes, where
+                    // there is nothing to filter.
+                    Menu {
+                        if reading.kind.isFilterable {
+                            Button("Filters…", systemImage: "line.3.horizontal.decrease.circle") {
+                                showingFilters = true
+                            }
                         }
+                        Button("Muted channels…", systemImage: "eye.slash") {
+                            showingMutedChannels = true
+                        }
+                    } label: {
+                        Label("Options", systemImage: feedIsNarrowed ? "ellipsis.circle.fill" : "ellipsis.circle")
                     }
                 }
             }
             .sheet(isPresented: $showingFilters) {
                 ReadingFiltersView()
+                    .environmentObject(reading)
+            }
+            .sheet(isPresented: $showingMutedChannels) {
+                MutedChannelsView()
                     .environmentObject(reading)
             }
             .overlay {
@@ -76,8 +90,35 @@ struct ReadingView: View {
         .padding(.vertical, 8)
     }
 
-    private var filtersActive: Bool {
-        reading.selectedTopic != nil || reading.since != nil || reading.until != nil
+    /// Whether the feed is showing less than everything the server offers, from
+    /// either a transient filter or a muted channel. Both fill the toolbar icon:
+    /// what matters to the reader is that something is being held back.
+    private var feedIsNarrowed: Bool {
+        reading.selectedTopic != nil
+            || reading.since != nil
+            || reading.until != nil
+            || (reading.kind.respectsMuting && reading.hasMutedChannels)
+    }
+
+    /// Empty feeds are not all the same: a feed emptied by muting looks identical
+    /// to one with nothing published, so it says which it is and offers the way out.
+    @ViewBuilder
+    private var emptyState: some View {
+        if reading.isEmptyOnlyBecauseOfMuting {
+            ContentUnavailableView {
+                Label("All muted", systemImage: "eye.slash")
+            } description: {
+                Text("Everything loaded here is in a muted channel.")
+            } actions: {
+                Button("Muted channels…") { showingMutedChannels = true }
+            }
+        } else {
+            ContentUnavailableView(
+                "Nothing here",
+                systemImage: reading.kind.systemImage,
+                description: Text(reading.lastError ?? "Nothing matches the current filters.")
+            )
+        }
     }
 
     @ViewBuilder
