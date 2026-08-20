@@ -10,8 +10,14 @@
 
 import Foundation
 
-/// A topic reference carried by feed posts (the post's channel).
-struct TopicRef: Decodable, Hashable {
+/// A topic reference carried by feed posts (the post's channel). `id` is the
+/// topic *slug* — stable, human-meaningful, and what ?topic= accepts — which is
+/// why ReadingStore persists muted channels by it.
+///
+/// Encodable as well as Decodable so ReadingStore can cache the channels it has
+/// seen: a muted channel is filtered out of the feed, so without a cache there
+/// would be nothing left to name it in the un-mute UI.
+struct TopicRef: Codable, Hashable {
     let id: String
     let name: String
 }

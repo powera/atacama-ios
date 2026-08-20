@@ -39,8 +39,13 @@ The app has three tabs (`RootView`):
 - **Read** — a read-only feed from a newslettr site (the `Views/Reading/` screens
   + `ReadingStore`), with a Posts / Photos / Links / Quotes selector. Reading is
   **public** (the `GET /api/{posts,images,links,quotes}` feeds need no token), so
-  it works without sign-in. Posts and photos filter by topic and date;
-  intelligent digest/summarization is deferred.
+  it works without sign-in. Posts and photos filter by topic and date, and
+  whole channels can be **muted** out of the tab (`MutedChannelsView` →
+  `ReadingStore.mutedChannels`); intelligent digest/summarization is deferred.
+  Muting is stored on the device, per server: the read feeds carry no token, so
+  the server has no reader identity to key a preference to, and newslettr's
+  `topics.access_level` means something else entirely (access control — it
+  would hide the channel from every reader on the web).
 
 ## Architecture
 
