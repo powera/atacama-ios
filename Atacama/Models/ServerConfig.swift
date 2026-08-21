@@ -74,6 +74,11 @@ struct ServerConfig: Identifiable, Codable, Hashable {
     /// Whether the server renders AML previews (POST /api/preview). Nil is
     /// "unknown, allow", like supportsImages.
     var supportsPreview: Bool?
+    /// Absolute URL of this server's AML stylesheet, from `styles.colortext` in
+    /// the discovery document. Nil on a server added before the field existed
+    /// (or one that does not report it); HTMLView falls back to trying the two
+    /// known paths. See `AMLStylesheet`.
+    var colortextCSSURL: String?
 
     init(
         id: UUID = UUID(),
@@ -85,7 +90,8 @@ struct ServerConfig: Identifiable, Codable, Hashable {
         supportsImages: Bool? = nil,
         supportsQuotes: Bool? = nil,
         supportsMessages: Bool? = nil,
-        supportsPreview: Bool? = nil
+        supportsPreview: Bool? = nil,
+        colortextCSSURL: String? = nil
     ) {
         self.id = id
         self.baseURL = baseURL
@@ -97,6 +103,7 @@ struct ServerConfig: Identifiable, Codable, Hashable {
         self.supportsQuotes = supportsQuotes
         self.supportsMessages = supportsMessages
         self.supportsPreview = supportsPreview
+        self.colortextCSSURL = colortextCSSURL
     }
 
     /// Whether the app can currently sign in to this server. Only OAuth is wired
@@ -168,7 +175,8 @@ struct ServerConfig: Identifiable, Codable, Hashable {
             supportsImages: supportsImages,
             supportsQuotes: supportsQuotes,
             supportsMessages: supportsMessages,
-            supportsPreview: supportsPreview
+            supportsPreview: supportsPreview,
+            colortextCSSURL: colortextCSSURL.map(TransportSecurity.normalizedURLString)
         )
     }
 }
@@ -188,6 +196,9 @@ struct ServerConfigResponse: Decodable {
     let apiBase: String
     let auth: Auth
     let capabilities: Capabilities?
+    /// Where this host serves the assets a client needs to render server HTML.
+    /// Absent on older backends.
+    let styles: Styles?
 
     struct Auth: Decodable {
         let type: String
@@ -216,10 +227,20 @@ struct ServerConfigResponse: Decodable {
         let quotes: Bool?
     }
 
+    /// Stylesheet URLs the server publishes for its own rendered HTML.
+    struct Styles: Decodable {
+        /// Absolute URL of the AML stylesheet. Which path serves it differs per
+        /// app and only one is public per host — /reader/static/ is anonymous on
+        /// a content domain but sits behind the author gate on the publisher —
+        /// so the server names it rather than the client assuming.
+        let colortext: String?
+    }
+
     enum CodingKeys: String, CodingKey {
         case name
         case apiBase = "api_base"
         case auth
         case capabilities
+        case styles
     }
 }

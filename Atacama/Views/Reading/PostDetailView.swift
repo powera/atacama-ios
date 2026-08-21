@@ -7,6 +7,10 @@
 //  never reimplements AML rendering). "See also" references navigate to other
 //  posts. Reading is public, so no sign-in is required.
 //
+//  The toolbar opens the post on the web, using the reader-facing `url` the feed
+//  API returns, for the things the app does not render: comments, the site's own
+//  navigation, and sharing a link to what you are reading.
+//
 
 import SwiftUI
 
@@ -15,10 +19,25 @@ struct PostDetailView: View {
     /// Title to show in the nav bar before the body loads (from the list row).
     var fallbackTitle: String = ""
 
+    /// Reader-facing URL from the list row, so "View in Browser" works before —
+    /// and even if — the detail request finishes.
+    var fallbackURL: String = ""
+
     @EnvironmentObject private var reading: ReadingStore
     @State private var detail: PostDetail?
     @State private var isLoading = false
     @State private var errorMessage: String?
+
+    /// The post's page on the web. Prefers the loaded detail, falling back to the
+    /// URL the row already carried.
+    private var webURL: URL? {
+        // A detail response can carry an empty url (a server with no public base
+        // configured), so pick the first one that is actually there rather than
+        // letting an empty string win over the row's.
+        let candidates = [detail?.url ?? "", fallbackURL]
+        guard let string = candidates.first(where: { !$0.isEmpty }) else { return nil }
+        return URL(string: string)
+    }
 
     var body: some View {
         Group {
@@ -37,6 +56,22 @@ struct PostDetailView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .toolbar {
+            if let webURL {
+                ToolbarItem(placement: .primaryAction) {
+                    Menu {
+                        Link(destination: webURL) {
+                            Label("View in Browser", systemImage: "safari")
+                        }
+                        ShareLink(item: webURL) {
+                            Label("Share Link", systemImage: "square.and.arrow.up")
+                        }
+                    } label: {
+                        Label("Options", systemImage: "ellipsis.circle")
+                    }
+                }
+            }
+        }
         .task(id: postID) { await load() }
     }
 
@@ -63,9 +98,11 @@ struct PostDetailView: View {
             HTMLView(
                 html: bodyWithReferences(detail),
                 baseURL: reading.readingServer?.baseURL,
-                // The reading server is a content domain, which serves the
-                // stylesheet publicly.
-                styleOrigin: reading.readingServer?.baseURL
+                // Where the AML stylesheet lives depends on the host, so ask
+                // AMLStylesheet rather than assuming a path — without it a
+                // colortext block, a literal span ( << … >> ) and an inline
+                // title all render as plain prose.
+                stylesheetURLs: AMLStylesheet.urls(for: reading.readingServer)
             )
         }
     }

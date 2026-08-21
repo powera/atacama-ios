@@ -48,7 +48,8 @@ GET /api/atacama-config
   "name": "Alex Power's blog",
   "api_base": "https://newslettr.com",
   "auth": { "type": "oauth", "login_path": "/login" },
-  "capabilities": { "preview": true, "messages": true, "channels": true, "links": true, "images": true, "quotes": true }
+  "capabilities": { "preview": true, "messages": true, "channels": true, "links": true, "images": true, "quotes": true },
+  "styles": { "colortext": "https://newslettr.com/publisher/static/css/colortext.css" }
 }
 ```
 
@@ -61,8 +62,18 @@ GET /api/atacama-config
   Read tab's Photos/Quotes views; absent flags (older backends) are treated as
   "allowed" for already-added servers but recorded on `ServerConfig` when a
   server is added.
+- `styles.colortext` — absolute URL of the **AML stylesheet**, which `HTMLView`
+  links alongside a `body_html` or a `POST /api/preview` result. Without it a
+  colortext block, a literal span (`<< … >>`) and an inline title all render as
+  plain prose. **The path differs per host and only one is public on each**: a
+  reader-served content domain serves `/reader/static/css/colortext.css`
+  anonymously, while on the publisher that prefix is behind the author gate and
+  `303`s to the login page — so the client must use the advertised URL rather
+  than assume a path. Older servers omit the block; `AMLStylesheet` then links
+  both known paths and lets the redirect-to-HTML one lose.
 
-Implemented in newslettr at `internal/app/publisher/routes.go` (`apiConfig`).
+Implemented in newslettr at `internal/app/publisher/routes.go` (`apiConfig`) and
+`internal/app/readapi/readapi.go` (`Discovery`, for reader-served domains).
 
 ---
 
@@ -323,6 +334,9 @@ All params optional: `topic` (topic GUID; unknown → 422), `since`/`until`
 
 Decoded into `PostSummary` / `PostListResponse` (`Models/Post.swift`).
 `published_at` is ISO8601 (the shared `APIClient` decoder uses `.iso8601`).
+`url` is the post's reader-facing page — it backs the row's **View in Browser**
+and **Share Link** context menu, and is handed to `PostDetailView` so those
+actions work there before the detail request finishes.
 
 ---
 
@@ -345,7 +359,10 @@ draft / soft-deleted / unknown GUID returns `404` (`NOT_FOUND`).
 }
 ```
 
-Decoded into `PostDetail`; `body_html` is shown in the shared `HTMLView`.
+Decoded into `PostDetail`; `body_html` is shown in the shared `HTMLView`, with
+the AML stylesheet named by `styles.colortext` in the discovery document — see
+`AMLStylesheet`. `url` backs the detail view's **View in Browser** / **Share
+Link** toolbar menu.
 
 ---
 

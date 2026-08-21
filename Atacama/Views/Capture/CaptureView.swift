@@ -123,7 +123,7 @@ struct CaptureView: View {
                     html: previewHTML,
                     readAloudText: store.draft.body,
                     baseURL: store.targetServer?.apiBase,
-                    styleOrigin: colortextStyleOrigin,
+                    stylesheetURLs: AMLStylesheet.urls(for: colortextStyleServer),
                     tts: tts
                 )
             }
@@ -285,19 +285,17 @@ struct CaptureView: View {
         .disabled(store.draft.isEmpty || store.targetServer == nil || store.isSubmitting)
     }
 
-    /// Origin to load the preview's colortext stylesheet from.
+    /// Server to load the preview's AML stylesheet from — the one that rendered
+    /// the preview, so what is shown is what that host would serve.
     ///
-    /// Deliberately *not* the authoring server: reader and publisher are separate
-    /// services, and the publisher host (newslettr.com) gates
-    /// /reader/static/ behind its login, so the stylesheet 303s there. Prefer a
-    /// read-only content domain, which serves it publicly; fall back to the
-    /// reading server, then the target server.
-    private var colortextStyleOrigin: String? {
-        let servers = ServerStore.shared.servers
-        if let contentDomain = servers.first(where: \.isReadOnly) {
-            return contentDomain.baseURL
-        }
-        return ReadingStore.shared.readingServer?.baseURL ?? store.targetServer?.baseURL
+    /// This used to prefer any read-only content domain in the server list,
+    /// because the publisher host (newslettr.com) gates /reader/static/ behind
+    /// its login and the stylesheet 303s there. `AMLStylesheet` handles that
+    /// properly now — it uses the path the server advertises, and falls back to
+    /// trying both known ones — so the preview no longer has to borrow styling
+    /// from an unrelated site.
+    private var colortextStyleServer: ServerConfig? {
+        store.targetServer ?? ReadingStore.shared.readingServer
     }
 
     // MARK: - Actions
@@ -385,8 +383,8 @@ private struct PreviewSheet: View {
     let readAloudText: String
     /// API base of the server the preview was rendered by, for asset resolution.
     var baseURL: String?
-    /// Origin the colortext stylesheet is loaded from.
-    var styleOrigin: String?
+    /// AML stylesheet URLs to link. See `AMLStylesheet`.
+    var stylesheetURLs: [String] = []
     @ObservedObject var tts: TTSService
     @Environment(\.dismiss) private var dismiss
 
@@ -394,7 +392,7 @@ private struct PreviewSheet: View {
         NavigationStack {
             Group {
                 if let html {
-                    HTMLView(html: html, baseURL: baseURL, styleOrigin: styleOrigin)
+                    HTMLView(html: html, baseURL: baseURL, stylesheetURLs: stylesheetURLs)
                 } else {
                     ContentUnavailableView("No preview", systemImage: "eye.slash")
                 }
