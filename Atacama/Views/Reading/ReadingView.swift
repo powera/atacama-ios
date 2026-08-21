@@ -127,10 +127,22 @@ struct ReadingView: View {
         case .posts:
             List(reading.posts) { post in
                 NavigationLink {
-                    PostDetailView(postID: post.id, fallbackTitle: post.title)
+                    PostDetailView(postID: post.id, fallbackTitle: post.title, fallbackURL: post.url)
                         .environmentObject(reading)
                 } label: {
                     PostRowView(post: post)
+                }
+                // The same web actions the detail view offers, without having to
+                // open the post first.
+                .contextMenu {
+                    if !post.url.isEmpty, let url = URL(string: post.url) {
+                        Link(destination: url) {
+                            Label("View in Browser", systemImage: "safari")
+                        }
+                        ShareLink(item: url) {
+                            Label("Share Link", systemImage: "square.and.arrow.up")
+                        }
+                    }
                 }
             }
             .listStyle(.plain)

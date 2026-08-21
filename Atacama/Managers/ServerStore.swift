@@ -87,7 +87,8 @@ final class ServerStore: ObservableObject {
             supportsImages: response.capabilities?.images,
             supportsQuotes: response.capabilities?.quotes,
             supportsMessages: response.capabilities?.messages,
-            supportsPreview: response.capabilities?.preview
+            supportsPreview: response.capabilities?.preview,
+            colortextCSSURL: response.styles?.colortext
         )
         if let index = servers.firstIndex(where: { $0.id == server.id }) {
             servers[index] = server
